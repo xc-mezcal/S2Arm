@@ -62,6 +62,9 @@ jobs:
             S2A_SHELL_CLOSURE_SUGGEST="$RUNNER_TEMP/closure_suggest.txt" bash pack/shell_build.sh "$out"
             echo "壳输入闭包：托管机上没核（访问时间不可靠），仅供个人测试" >> "$GITHUB_STEP_SUMMARY"
           else
+            # 失败原因写成一条公开注解（不登录也能从 check-runs annotations 读到）
+            msg=$(tail -n 60 "$RUNNER_TEMP/shell.log" | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=shell_build failed::$msg"
             exit 1
           fi
           python3 -c "import json,sys; d=json.load(open(sys.argv[1]))['details']; print('shellId', d['shellId'], 'iosSdk', d['iosSdk'], 'commit', d['sourceCommit'])" "$out/manifest.json" | tee -a "$GITHUB_STEP_SUMMARY"
