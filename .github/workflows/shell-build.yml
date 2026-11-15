@@ -1,0 +1,73 @@
+# 个人测试用：在 GitHub 托管 Mac 上出 iOS 预编壳（pack/shell_build.sh），产物作为 Actions artifact 下载。
+#   只出与游戏无关的壳：不碰游戏文件、密钥、存档。不进上游 PR（只放在测试分支上）。
+name: shell-build
+on:
+  push:
+    branches: ['test/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shell-build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  shell:
+    runs-on: macos-26
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: compat/tree/global.json
+      - name: Homebrew 工具（bash 5、GNU make、构建 venv 用的 python@3.12、cmake / meson / ninja）
+        run: |
+          brew install bash make python@3.12 cmake meson ninja
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+      - name: 选 iOS SDK 主版本对得上 tools/toolchain.env 的 Xcode
+        run: |
+          want=$(awk -F= '$1 == "IPHONEOS_SDK_MAJOR" { print $2 }' tools/toolchain.env)
+          echo "要 iOS SDK 主版本 $want；托管机上的 Xcode："
+          pick=
+          for x in /Applications/Xcode*.app; do
+            v=$(DEVELOPER_DIR="$x/Contents/Developer" xcrun --sdk iphoneos --show-sdk-version 2> /dev/null) || continue
+            echo "  $x → iOS SDK $v"
+            [ "${v%%.*}" = "$want" ] && pick=$x
+          done
+          [ -n "$pick" ] || { echo "【红】托管机没有 iOS SDK $want 的 Xcode，出不了壳"; exit 1; }
+          echo "用 $pick"
+          sudo xcode-select -s "$pick/Contents/Developer"
+          echo "S2A_DEVELOPER_DIR=$pick/Contents/Developer" >> "$GITHUB_ENV"
+          xcodebuild -downloadComponent MetalToolchain || echo "（Metal 工具链下载没成功，若已预装可忽略）"
+      - name: 一键准备构建依赖（launchers/macos/prepare_build.py：venv、C 改写器钉版源码）
+        run: python3 launchers/macos/prepare_build.py
+      - name: 兼容层上游基线
+        run: bash compat/fetch_base.sh
+      - name: 出壳
+        env:
+          S2A_REWRITER_DEPS: ${{ github.workspace }}/build/rewriter-deps
+          S2A_PY: ${{ github.workspace }}/build/venv/bin/python
+          S2A_RUN_ROOT: ${{ runner.temp }}/s2a-run
+        run: |
+          set -o pipefail
+          out="$RUNNER_TEMP/shell"
+          if bash pack/shell_build.sh "$out" 2>&1 | tee "$RUNNER_TEMP/shell.log"; then
+            echo "壳输入闭包：已核" >> "$GITHUB_STEP_SUMMARY"
+          elif grep -q '表外' "$RUNNER_TEMP/shell.log"; then
+            # 托管机文件系统的访问时间不可靠时闭包核会误报：重出一次只写建议表、不判红（个人测试壳，摘要里注明）
+            rm -rf "$out"
+            S2A_SHELL_CLOSURE_SUGGEST="$RUNNER_TEMP/closure_suggest.txt" bash pack/shell_build.sh "$out"
+            echo "壳输入闭包：托管机上没核（访问时间不可靠），仅供个人测试" >> "$GITHUB_STEP_SUMMARY"
+          else
+            exit 1
+          fi
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1]))['details']; print('shellId', d['shellId'], 'iosSdk', d['iosSdk'], 'commit', d['sourceCommit'])" "$out/manifest.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          cd "$RUNNER_TEMP" && ditto -c -k --keepParent shell s2arm-shell.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: s2arm-shell-${{ github.sha }}
+          path: ${{ runner.temp }}/s2arm-shell.zip
+          retention-days: 14
