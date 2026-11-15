@@ -130,6 +130,10 @@ jobs:
           S2A_REWRITER_DEPS: ${{ github.workspace }}/build/rewriter-deps
           S2A_RUN_ROOT: C:/s2a-run
           PYTHONUTF8: '1'
+          # CMake 缺省生成器在托管机上是 Visual Studio（cl.exe）：C 改写器 / Capstone 要 clang（__int128 等），同出包机走 Ninja + LLVM clang
+          CMAKE_GENERATOR: Ninja
+          CC: clang
+          CXX: clang++
         run: |
           set -o pipefail
           m="$RUNNER_TEMP/mac"
