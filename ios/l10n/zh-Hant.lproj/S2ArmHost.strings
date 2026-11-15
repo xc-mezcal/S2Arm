@@ -117,6 +117,11 @@
 "vpad.layout.default" = "預設配置";
 "vpad.layout.2d" = "2D 配置";
 "vpad.layout.2d.note" = "十字鍵放大、可按斜角，沒有搖桿，適合橫向捲軸和像素遊戲";
+"vpad.layout.auto" = "自動";
+"vpad.layout.auto.note" = "左右各 35% 起搖桿，點中間直接觸控";
+"vpad.mode.keys" = "鍵";
+"vpad.mode.auto" = "自動";
+"vpad.mode.touch" = "觸";
 "vpad.layout.err.builtin" = "default / touch 是內建方案，請另存為新方案";
 "vpad.layout.err.buttonCount" = "需要完整的 14 個按鍵，可另外提供 LS/RS";
 "vpad.layout.err.buttonFields" = "按鍵欄位、範圍或編號無效，且編號不可重複";
