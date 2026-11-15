@@ -1,5 +1,7 @@
-# 个人测试用：在 GitHub 托管 Mac 上出 iOS 预编壳（pack/shell_build.sh），产物作为 Actions artifact 下载。
-#   只出与游戏无关的壳：不碰游戏文件、密钥、存档。不进上游 PR（只放在测试分支上）。
+# 个人测试用：GitHub 托管机上出一份完整的 Windows 启动器目录（含本分支的 iOS 预编壳），作为 Actions artifact 下载。
+#   mac 作业：预编壳（pack/shell_build.sh）+ 时区（make_tzdata.sh --bundle-to）+ 开源共享字体（make_open_fonts.py）
+#   windows 作业：bundle_win.py 组装（引擎快照、预编件、随包运行时、Impactor）+ dotnet publish 出 S2Arm.exe
+#   不碰游戏文件、密钥、存档。不进上游 PR（只放在测试分支上）。
 name: shell-build
 on:
   push:
@@ -68,9 +70,81 @@ jobs:
             exit 1
           fi
           python3 -c "import json,sys; d=json.load(open(sys.argv[1]))['details']; print('shellId', d['shellId'], 'iosSdk', d['iosSdk'], 'commit', d['sourceCommit'])" "$out/manifest.json" | tee -a "$GITHUB_STEP_SUMMARY"
-          cd "$RUNNER_TEMP" && ditto -c -k --keepParent shell s2arm-shell.zip
+      - name: 时区数据与开源共享字体（Windows 组装要的另两样 Mac 产物）
+        env:
+          S2A_RUN_ROOT: ${{ runner.temp }}/s2a-run
+        run: |
+          set -o pipefail
+          { bash services/systemdata/make_tzdata.sh --prepare-sources \
+            && bash services/systemdata/make_tzdata.sh --bundle-to "$RUNNER_TEMP/tzdata" \
+            && build/venv/bin/python pack/fonts/make_open_fonts.py "$RUNNER_TEMP/fonts"; } 2>&1 | tee "$RUNNER_TEMP/extras.log" || {
+            msg=$(tail -n 40 "$RUNNER_TEMP/extras.log" | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=tzdata/fonts failed::$msg"; exit 1; }
+          ls "$RUNNER_TEMP/tzdata" "$RUNNER_TEMP/fonts"
+      - name: 打包三样给 Windows 作业（ditto 保留壳目录原样）
+        run: cd "$RUNNER_TEMP" && ditto -c -k --keepParent shell s2arm-shell.zip && ditto -c -k --keepParent tzdata tzdata.zip && ditto -c -k --keepParent fonts fonts.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: s2arm-shell-${{ github.sha }}
-          path: ${{ runner.temp }}/s2arm-shell.zip
+          name: mac-inputs
+          path: |
+            ${{ runner.temp }}/s2arm-shell.zip
+            ${{ runner.temp }}/tzdata.zip
+            ${{ runner.temp }}/fonts.zip
+          retention-days: 7
+
+  launcher:
+    needs: shell
+    runs-on: windows-latest
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: git config --system core.longpaths true
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: compat/tree/global.json
+      - name: 编译工具（LLVM clang、ninja）与钉版 Python 包
+        run: |
+          echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
+          python -m pip install ninja -r tools/rewriter-requirements.txt -r launchers/macos/requirements-runtime.txt
+          "C:/Program Files/LLVM/bin/clang" --version | head -1; cmake --version | head -1; cargo --version; dotnet --version
+      - name: C 改写器固定依赖
+        run: python runtime/rewriter/prepare_deps.py build/rewriter-deps
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-inputs
+          path: ${{ runner.temp }}/mac
+      - name: 解开 Mac 产物
+        run: |
+          cd "$RUNNER_TEMP/mac" && for z in s2arm-shell tzdata fonts; do tar -xf "$z.zip"; done && ls
+      - name: 组装启动器目录（bundle_win.py）
+        env:
+          S2A_REWRITER_DEPS: ${{ github.workspace }}/build/rewriter-deps
+          S2A_RUN_ROOT: C:/s2a-run
+          PYTHONUTF8: '1'
+        run: |
+          set -o pipefail
+          m="$RUNNER_TEMP/mac"
+          python -X utf8 launchers/windows/bundle_win.py C:/o/S2Arm --shell "$m/shell" --tzdata "$m/tzdata" --fonts "$m/fonts" 2>&1 | tee "$RUNNER_TEMP/bundle.log" || {
+            msg=$( { tail -n 50 "$RUNNER_TEMP/bundle.log"; for f in build/windows/prepare-logs/*.log; do [ -f "$f" ] && { echo "== $f"; tail -n 15 "$f"; }; done; } | tail -n 120 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=bundle_win failed::$msg"; exit 1; }
+      - name: 启动器程序 S2Arm.exe
+        run: dotnet publish launchers/windows/launcher/App/S2Arm.csproj -c Release -r win-x64 --self-contained true -o C:/o/S2Arm
+      - name: 打包
+        run: |
+          cd C:/o && 7z a -tzip -mx=5 "$RUNNER_TEMP/S2Arm-windows-test.zip" S2Arm > /dev/null
+          echo "启动器 zip：$(( $(stat -c %s "$RUNNER_TEMP/S2Arm-windows-test.zip") / 1048576 )) MB" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: S2Arm-windows-test-${{ github.sha }}
+          path: ${{ runner.temp }}/S2Arm-windows-test.zip
           retention-days: 14
+          compression-level: 0
