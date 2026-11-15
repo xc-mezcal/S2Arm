@@ -133,6 +133,11 @@ jobs:
         run: |
           set -o pipefail
           m="$RUNNER_TEMP/mac"
+          # 预编件按 cc > clang > gcc 找编译器（graphics/tools/nxfmt.py）：托管机上的 cc 是 MinGW gcc，不认 MSVC 目标的 -Wl,/EXPORT；
+          #   本步把带 cc.exe 的目录从 PATH 拿掉，统一走 LLVM clang（同 Windows 出包机）
+          echo "cc 在：$(which -a cc 2> /dev/null | tr '\n' ' ')"
+          PATH=$(printf %s "$PATH" | tr ':' '\n' | while IFS= read -r d; do if [ -e "$d/cc.exe" ] || [ -e "$d/cc" ]; then echo "PATH 去掉 $d" >&2; else printf '%s\n' "$d"; fi; done | paste -sd: -)
+          export PATH; which clang
           python -X utf8 launchers/windows/bundle_win.py C:/o/S2Arm --shell "$m/shell" --tzdata "$m/tzdata" --fonts "$m/fonts" 2>&1 | tee "$RUNNER_TEMP/bundle.log" || {
             msg=$( { tail -n 50 "$RUNNER_TEMP/bundle.log"; for f in build/windows/prepare-logs/*.log; do [ -f "$f" ] && { echo "== $f"; tail -n 15 "$f"; }; done; } | tail -n 120 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
             echo "::error title=bundle_win failed::$msg"; exit 1; }
