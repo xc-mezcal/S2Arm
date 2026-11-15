@@ -106,6 +106,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: 发版 tag（bundle_win.py 用 git describe --tags 取版本号；fork 不带上游的 tag）
+        run: git fetch --tags --force https://github.com/jhaizhou-ops/S2Arm.git && git describe --tags --abbrev=0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
