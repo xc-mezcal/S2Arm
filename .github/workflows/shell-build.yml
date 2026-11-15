@@ -94,7 +94,8 @@ jobs:
 
   launcher:
     needs: shell
-    runs-on: windows-latest
+    # 随包 VC++ 运行库钉 14.44.35112（VS 2022 17.14 的 Redist）：windows-latest 已是 VS 2026，用还带 VS 2022 的 windows-2025
+    runs-on: windows-2025
     timeout-minutes: 150
     defaults:
       run:
@@ -125,10 +126,24 @@ jobs:
       - name: 解开 Mac 产物
         run: |
           cd "$RUNNER_TEMP/mac" && for z in s2arm-shell tzdata fonts; do python -m zipfile -e "$z.zip" . || exit 1; done && ls && ls shell
+      - name: Git for Windows 2.54.0（随包 bash / MinGit 跟这份版本走，runtime_cache.py 只钉了 2.54.0 的哈希）
+        run: |
+          v=$(python -c "import re; print(re.search(r'MinGit-(\d+\.\d+\.\d+)-64-bit', open('launchers/shared/runtime_cache.py',encoding='utf-8').read()).group(1))")
+          echo "钉的 Git 版本：$v"
+          curl -fsSL -o "$RUNNER_TEMP/pgit.7z.exe" "https://github.com/git-for-windows/git/releases/download/v$v.windows.1/PortableGit-$v-64-bit.7z.exe"
+          7z x "$RUNNER_TEMP/pgit.7z.exe" -oC:/pgit -y > /dev/null
+          C:/pgit/cmd/git.exe --version
+      - name: zstd 1.5.7（随包运行时收它；bundle_runtime_win.py 缺省路径是出包机自己的目录）
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/zstd.zip" https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-v1.5.7-win64.zip
+          cd C:/ && python -m zipfile -e "$RUNNER_TEMP/zstd.zip" C:/zstd && ls C:/zstd/zstd-v1.5.7-win64
+          ls "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Redist/MSVC/" || true
       - name: 组装启动器目录（bundle_win.py）
         env:
           S2A_REWRITER_DEPS: ${{ github.workspace }}/build/rewriter-deps
           S2A_RUN_ROOT: C:/s2a-run
+          S2A_RT_GIT: C:\pgit
+          S2A_RT_ZSTD: C:\zstd\zstd-v1.5.7-win64
           PYTHONUTF8: '1'
           # CMake 缺省生成器在托管机上是 Visual Studio（cl.exe）：C 改写器 / Capstone 要 clang（__int128 等），同出包机走 Ninja + LLVM clang
           CMAKE_GENERATOR: Ninja
