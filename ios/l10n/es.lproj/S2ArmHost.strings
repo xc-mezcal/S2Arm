@@ -166,6 +166,11 @@
 "vpad.layout.default" = "Disposición predeterminada";
 "vpad.layout.2d" = "Diseño 2D";
 "vpad.layout.2d.note" = "Cruceta ampliada con diagonales, sin sticks; para juegos de desplazamiento lateral y píxeles";
+"vpad.layout.auto" = "Auto";
+"vpad.layout.auto.note" = "Joysticks en el 35 % izquierdo y derecho; tocar el centro toca la pantalla del juego";
+"vpad.mode.keys" = "Botones";
+"vpad.mode.auto" = "Auto";
+"vpad.mode.touch" = "Táctil";
 "vpad.layout.err.builtin" = "default / touch son diseños integrados; guarda como un diseño nuevo en su lugar";
 "vpad.layout.err.buttonCount" = "Se requieren los 14 botones; LS/RS pueden añadirse";
 "vpad.layout.err.buttonFields" = "Campos, rangos o identificadores de botones no válidos; los identificadores deben ser únicos";

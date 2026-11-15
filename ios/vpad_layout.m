@@ -7,6 +7,7 @@ NSString *const S2AVPadLayoutMineIdentifier = @"mine";
 // 纯触屏：没有虚拟按键，也就没有可编辑的几何，因此不落文件、只记在选择记录里。
 NSString *const S2AVPadLayoutTouchIdentifier = @"touch";
 NSString *const S2AVPadLayout2DIdentifier = @"2d";
+NSString *const S2AVPadLayoutAutoIdentifier = @"auto";
 
 CGFloat S2AVPadKeyOpacity(CGFloat idle, BOOL active) {
     return active ? MAX(0.75, idle) : idle;
@@ -100,11 +101,13 @@ static CGRect normalized_rect(NSDictionary *value) {
     return layout;
 }
 + (BOOL)isBuiltinIdentifier:(NSString *)identifier {
-    return [identifier isEqualToString:S2AVPadLayoutDefaultIdentifier] || [identifier isEqualToString:S2AVPadLayoutTouchIdentifier] || [identifier isEqualToString:S2AVPadLayout2DIdentifier];
+    return [identifier isEqualToString:S2AVPadLayoutDefaultIdentifier] || [identifier isEqualToString:S2AVPadLayoutTouchIdentifier] || [identifier isEqualToString:S2AVPadLayout2DIdentifier]
+        || [identifier isEqualToString:S2AVPadLayoutAutoIdentifier];
 }
 - (NSString *)displayName {
     if ([_identifier isEqualToString:S2AVPadLayoutDefaultIdentifier]) return S2AL(@"vpad.layout.default");
     if ([_identifier isEqualToString:S2AVPadLayout2DIdentifier]) return S2AL(@"vpad.layout.2d");
+    if ([_identifier isEqualToString:S2AVPadLayoutAutoIdentifier]) return S2AL(@"vpad.layout.auto");
     if ([_identifier isEqualToString:S2AVPadLayoutMineIdentifier]) return S2AL(@"vpad.layout.mine");
     return _name;
 }
@@ -168,6 +171,26 @@ static CGRect normalized_rect(NSDictionary *value) {
     S2AVPadLayout *layout = [self new]; layout->_document = doc; layout->_identifier = S2AVPadLayout2DIdentifier; layout->_name = doc[@"name"];
     layout->_buttons = buttons; layout->_sticks = @[]; return layout;
 }
++ (instancetype)autoForSafeRect:(CGRect)rect split:(BOOL)split {
+    // 按键照搬默认布局（同一套位置 / 尺寸），只把两根浮动摇杆的激活区从各占半屏收到各占 kS2AVPadAutoStickZone，中间空出来给触屏
+    S2AVPadLayout *base = [self defaultForSafeRect:rect split:split];
+    double z = kS2AVPadAutoStickZone;
+    NSMutableArray *sticks = [NSMutableArray array];
+    for (NSDictionary *stick in base.sticks) {
+        NSMutableDictionary *m = [stick mutableCopy]; BOOL left = [stick[@"id"] isEqualToString:@"left"];
+        m[@"activation"] = @{@"x": @(left ? 0 : 1 - z), @"y": @0, @"width": @(z), @"height": @1}; [sticks addObject:m];
+    }
+    NSMutableDictionary *doc = [base.document mutableCopy];
+    doc[@"id"] = S2AVPadLayoutAutoIdentifier; doc[@"name"] = S2AL(@"vpad.layout.auto"); doc[@"sticks"] = sticks;
+    S2AVPadLayout *layout = [self new]; layout->_document = [doc copy]; layout->_identifier = S2AVPadLayoutAutoIdentifier; layout->_name = doc[@"name"];
+    layout->_buttons = base.buttons; layout->_sticks = [sticks copy]; return layout;
+}
++ (instancetype)builtinForIdentifier:(NSString *)identifier safeRect:(CGRect)rect split:(BOOL)split {
+    if ([identifier isEqualToString:S2AVPadLayout2DIdentifier]) return [self twoDForSafeRect:rect];
+    if ([identifier isEqualToString:S2AVPadLayoutAutoIdentifier]) return [self autoForSafeRect:rect split:split];
+    return [self defaultForSafeRect:rect split:split];
+}
+- (BOOL)passesUnclaimedTouches { return [_identifier isEqualToString:S2AVPadLayoutAutoIdentifier]; }
 - (int)dpadDirectionsAt:(CGPoint)p safeRect:(CGRect)rect {
     if (_sticks.count) return -1;
     CGFloat sx = 0, sy = 0, reach = 0, half = 0; int n = 0; CGRect frames[4];

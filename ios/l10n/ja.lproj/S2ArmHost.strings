@@ -166,6 +166,11 @@
 "vpad.layout.default" = "デフォルトレイアウト";
 "vpad.layout.2d" = "2D レイアウト";
 "vpad.layout.2d.note" = "斜め入力可能な大きめの十字キー、スティックなし。横スクロールやピクセルゲームに最適";
+"vpad.layout.auto" = "オート";
+"vpad.layout.auto.note" = "左右35%にスティック、中央をタップするとゲーム画面をタッチ";
+"vpad.mode.keys" = "キー";
+"vpad.mode.auto" = "オート";
+"vpad.mode.touch" = "タッチ";
 "vpad.layout.err.builtin" = "default / touch は組み込みレイアウトです。新しいレイアウトとして保存してください";
 "vpad.layout.err.buttonCount" = "14 個のボタンすべてが必要です。LS/RS は追加可能";
 "vpad.layout.err.buttonFields" = "ボタンのフィールド、範囲、ID が無効です。ID は一意である必要があります";

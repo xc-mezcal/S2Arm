@@ -10,6 +10,11 @@ extern NSString *const S2AVPadLayoutTouchIdentifier;
 // "2d"（#268，11-09 维护者定稿 cmdr/assets/268_vpad_2d_对比_1109.png）：横版 / 像素游戏用。十字键放大到左拇指落点、可按斜角，ABXY 放大，
 //   没有摇杆和 L3 / R3（左半屏不再抢触点）；同 default 按安全区现算，不对应磁盘文件
 extern NSString *const S2AVPadLayout2DIdentifier;
+// "auto"：按键与默认布局同位置，浮动摇杆只在左 35% / 右 35% 起；中间 30% 落下的手指（没按到键）直接进 Hid.Touchscreen。
+//   按键优先于触屏（中间的 − / + 照旧是键），推摇杆不必等判定，点屏幕不用切方案。同 default 按安全区现算，不对应磁盘文件
+extern NSString *const S2AVPadLayoutAutoIdentifier;
+// 自动布局左右摇杆激活区各占安全区宽的比例；中间剩下的 1 - 2 × 它是触屏区
+static const double kS2AVPadAutoStickZone = 0.35;
 // Rendering targets shared by UIKit and host tests; idle must be in [0, 1].
 CGFloat S2AVPadKeyOpacity(CGFloat idle, BOOL active);
 
@@ -26,6 +31,11 @@ CGFloat S2AVPadKeyOpacity(CGFloat idle, BOOL active);
 + (instancetype)defaultForSafeRect:(CGRect)rect;
 + (instancetype)defaultForSafeRect:(CGRect)rect split:(BOOL)split;
 + (instancetype)twoDForSafeRect:(CGRect)rect;
++ (instancetype)autoForSafeRect:(CGRect)rect split:(BOOL)split;
+// 内置按键布局按 id 现算：2d → 2D、auto → 自动、其余（default / touch / 选中的文件读不出）→ 默认布局。vpad.m / vpad_shell.m 共用这一处
++ (instancetype)builtinForIdentifier:(nullable NSString *)identifier safeRect:(CGRect)rect split:(BOOL)split;
+// 没按到键、也不在摇杆激活区的手指交给游戏触屏（目前只有 auto）
+@property(nonatomic, readonly) BOOL passesUnclaimedTouches;
 // 八方向十字键（没有摇杆的布局，即 2D 和从它改出来的）：触点落在十字键圆区内 → 方向位（上 1 / 下 2 / 左 4 / 右 8，斜角两位），
 //   圆区外或有摇杆的布局 → -1。圆心 = 四个方向键中心的平均，半径 = 最远方向键中心 + 半个键宽；正中心一小圈（半径 0.2）不算方向
 - (int)dpadDirectionsAt:(CGPoint)p safeRect:(CGRect)rect;
@@ -56,6 +66,16 @@ static const double kS2AVPadStickTapSeconds = 0.25;
 static const double kS2AVPadStickTapMove = 10;
 static inline BOOL S2AVPadStickTapIsPress(double held, double maxMove) {
     return held >= 0 && held <= kS2AVPadStickTapSeconds && maxMove <= kS2AVPadStickTapMove;
+}
+
+// 触屏槽位每次 HID 读取发什么（vpad.m readTouches；单测 t_vpad_auto）。state：0 空、1 按着、2 已抬手待发 End；start：Start 还没发出去。
+//   返回 TouchAttribute（1 Start、2 End、0 无），-1 = 这个槽本次不出触点。
+//   按下和抬手落在两次读取之间（快速点按）时 Start 还没发：这一拍先发 Start、槽留着，下一拍再发 End——否则游戏只见到一拍 End、读不到按下
+static inline int S2AVPadTouchSlotRead(uint8_t *state, BOOL *start) {
+    if (*state == 0) return -1;
+    if (*start) { *start = NO; return 1; }
+    if (*state == 2) { *state = 0; return 2; }
+    return 0;
 }
 
 // 主线程触屏快照：按键上升沿 + 每根摇杆本次触点首次到边；一次快照最多请求一次轻反馈。

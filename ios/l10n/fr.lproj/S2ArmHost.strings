@@ -166,6 +166,11 @@
 "vpad.layout.default" = "Disposition par défaut";
 "vpad.layout.2d" = "Disposition 2D";
 "vpad.layout.2d.note" = "Croix directionnelle agrandie avec diagonales, sans sticks ; pour jeux à défilement latéral et jeux en pixel art";
+"vpad.layout.auto" = "Auto";
+"vpad.layout.auto.note" = "Joysticks sur les 35 % gauche et droit ; toucher le centre touche l’écran du jeu";
+"vpad.mode.keys" = "Touches";
+"vpad.mode.auto" = "Auto";
+"vpad.mode.touch" = "Tactile";
 "vpad.layout.err.builtin" = "default / touch sont des dispositions intégrées ; enregistrer sous une nouvelle disposition";
 "vpad.layout.err.buttonCount" = "Les 14 boutons sont requis ; LS/RS peuvent être ajoutés";
 "vpad.layout.err.buttonFields" = "Champs, plages ou ID de boutons invalides ; les ID doivent être uniques";
