@@ -232,6 +232,7 @@ __attribute__((visibility("default"), used)) void s2a_vpad_read_ex(s2a_pad_snaps
 - (void)offerTouchHint;
 - (int)setTouchOnly:(BOOL)on manual:(BOOL)manual why:(NSString *)why;
 - (BOOL)touchOnly;
+- (void)refreshMode;
 @end
 static __weak S2AVPadView *g_vpad;
 static _Atomic int g_touch_only = -1;   // 当前方案（reloadLayout 写）：1 仅触屏、0 按键、-1 没挂
@@ -272,6 +273,9 @@ void s2a_dprompt_ask(NSString *title, NSString *body, NSString *accept, NSString
     _Atomic int _screenLocked;   // HID 线程也读，遮罩本身只在主线程操作
     UIButton *_gear; NSTimer *_gearFade;    // 游戏内设置入口：屏幕左上角常驻，闲置时淡到看得见但不抢画面
     BOOL _touchWanted;                      // 游戏启用过触屏（s2a_vpad_touch_wanted）
+    BOOL _passthrough;                      // 当前布局把没按到键、不在摇杆激活区的手指交给游戏触屏（auto；reloadLayout 写）
+    UISegmentedControl *_mode;              // 「键 / 自动 / 触」切换钮：常驻屏幕上方正中（− / + 下面），一点就切；不靠游戏有没有报触屏（有的游戏用触屏却不报）
+    NSString *_lastKeys;                    // 本次运行最近一次用的按键方案（非 auto / touch）：「键」切回它，没有就回默认布局
     int _autoTouch;                         // 自动切（游戏声明触屏配置，manual=0）的本次运行覆盖：1 = 本次按仅触屏跑、不改持久化选择；0 = 没有覆盖
     // 拖动编辑按键位置（11-07 维护者）：编辑期间不向游戏发输入，手指拖哪个键挪哪个键；完成存成本款游戏的「我的布局」并选中
     BOOL _editing;
@@ -347,6 +351,14 @@ static NSString *button_label(NSString *identifier) {
     _settingsDirectory=[docs URLByAppendingPathComponent:@"VPadLayouts" isDirectory:YES];
     _layoutStore = [[S2AVPadLayoutStore alloc] initWithDirectory:_layoutDirectory settingsDirectory:_settingsDirectory split:_split];
     [self reloadLayout];
+    // 「键 / 自动 / 触」：11-09 删掉的「键 / 触」两段钮换成三段、常驻（不等游戏报触屏：有的游戏用触屏却从不走 s2a_vpad_touch_wanted）
+    _mode = [[UISegmentedControl alloc] initWithItems:@[S2AL(@"vpad.mode.keys"), S2AL(@"vpad.mode.auto"), S2AL(@"vpad.mode.touch")]];
+    _mode.accessibilityIdentifier = @"vpad.mode"; _mode.alpha = 0.7; _mode.hidden = s2a_unattended();
+    _mode.backgroundColor = [UIColor colorWithWhite:0 alpha:0.35]; _mode.selectedSegmentTintColor = [UIColor colorWithWhite:1 alpha:0.85];
+    [_mode setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor colorWithWhite:1 alpha:0.9], NSFontAttributeName: [UIFont boldSystemFontOfSize:12]} forState:UIControlStateNormal];
+    [_mode setTitleTextAttributes:@{NSForegroundColorAttributeName: UIColor.blackColor, NSFontAttributeName: [UIFont boldSystemFontOfSize:12]} forState:UIControlStateSelected];
+    [_mode addTarget:self action:@selector(modeTapped:) forControlEvents:UIControlEventValueChanged];
+    [self addSubview:_mode]; [self refreshMode];
     _gear = [UIButton buttonWithType:UIButtonTypeSystem]; _gear.accessibilityIdentifier = @"vpad.settings"; _gear.accessibilityLabel = S2AL(@"common.settings");
     [_gear setImage:[UIImage systemImageNamed:@"gearshape.fill"] forState:UIControlStateNormal]; _gear.tintColor = UIColor.whiteColor;
     _gear.backgroundColor = [UIColor colorWithWhite:0 alpha:0.45]; _gear.layer.cornerRadius = 18;
@@ -448,6 +460,7 @@ typedef BOOL (^VPFlag)(void);
         [lay addObject:[self live:[@"vp.layout." stringByAppendingString:lid] title:name note:note on:^BOOL{ return [st.selectedIdentifier isEqualToString:lid]; } disabled:nil
                               run:^{ [ws menuChoseLayout:lid]; }]]; };
     addLayout(S2AVPadLayoutDefaultIdentifier, S2AL(@"vpad.layout.default"), nil);
+    addLayout(S2AVPadLayoutAutoIdentifier, S2AL(@"vpad.layout.auto"), S2AL(@"vpad.layout.auto.note"));
     addLayout(S2AVPadLayout2DIdentifier, S2AL(@"vpad.layout.2d"), S2AL(@"vpad.layout.2d.note"));   // #268：一键切 2D，切回点「默认布局」
     addLayout(S2AVPadLayoutTouchIdentifier, S2AL(@"vpad.layout.touch"), S2AL(@"vpad.layout.touch.note"));
     for (S2AVPadLayout *l in st.layouts) if (![S2AVPadLayout isBuiltinIdentifier:l.identifier]) addLayout(l.identifier, l.displayName, nil);
@@ -626,9 +639,9 @@ typedef BOOL (^VPFlag)(void);
     }
     _keys = keys;
 }
-// 内置的按键布局按当前安全区现算：选了 2D 就是 2D（#268），其余（default / 选中的文件读不出）是默认布局
+// 内置的按键布局按当前安全区现算：2D（#268）/ 自动 / 其余（default / 选中的文件读不出）是默认布局
 - (S2AVPadLayout *)builtinLayout:(CGRect)safe {
-    return [_layoutStore.selectedIdentifier isEqualToString:S2AVPadLayout2DIdentifier] ? [S2AVPadLayout twoDForSafeRect:safe] : [S2AVPadLayout defaultForSafeRect:safe split:_split];
+    return [S2AVPadLayout builtinForIdentifier:_layoutStore.selectedIdentifier safeRect:safe split:_split];
 }
 - (void)reloadLayout {
     [self clearTouches];
@@ -639,8 +652,11 @@ typedef BOOL (^VPFlag)(void);
     _layout = selected ?: [self builtinLayout:[self layoutSafeRect]];
     _layoutProblem = error.localizedDescription;
     if (error) LOG("触屏布局：选定方案加载失败，暂用默认布局：%s", error.localizedDescription.UTF8String);
+    @synchronized(self) { _passthrough = !_touchOnly && _layout.passesUnclaimedTouches; }   // HID 线程 readTouches 也读它
+    if (!_touchOnly && !_layout.passesUnclaimedTouches) _lastKeys = [_layoutStore.selectedIdentifier copy];
     [self rebuildKeys]; [self setNeedsLayout]; [self wake];
-    atomic_store(&g_touch_only, _touchOnly ? 1 : 0); atomic_store(&g_user_chose, _layoutStore.manualChosen ? 1 : 0);
+    atomic_store(&g_touch_only, _touchOnly ? 1 : 0); atomic_store(&g_user_chose, _layoutStore.manualChosen ? 1 : 0); [self refreshMode];
+    if (_passthrough) LOG("触屏布局：自动（左右各 %.0f%% 起浮动摇杆，中间 %.0f%% 没按到键的手指交给游戏触屏）", kS2AVPadAutoStickZone * 100, (1 - 2 * kS2AVPadAutoStickZone) * 100);
     if (_touchOnly) { LOG("触屏布局：纯触屏（不显示虚拟按键，手指直接交给游戏）"); return; }
     LOG("触屏布局：应用 %s（schema 1）", _layout.identifier.UTF8String);
 }
@@ -939,7 +955,8 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     _settingsOpen = open; [self clearTouches]; if (!open) [self wake];
 }
 // 审计 P1-3：游戏启用了触屏（C# InputPump 读 Hid.Touchscreen.Active 后经 s2a_vpad_touch_wanted 转告）而当前是按键方案时，提示一次怎么切到「仅触屏操作」（本 App 只提示一次）。
-//   两套方案保持互斥、不做「又有按键又透传」：默认布局左右半屏空白处都是浮动摇杆的激活区，按键以外没有空地可透传，透传就等于推摇杆时游戏也收到点按；
+//   默认布局不透传：左右半屏空白处都是浮动摇杆的激活区，按键以外没有空地可透传，透传就等于推摇杆时游戏也收到点按；
+//   要「又有按键又能点屏」选「自动」（auto）：摇杆激活区收到左右各 35%，中间空出来的那条才透传；
 //   很多游戏开机就启用触屏、分不出真用不用，所以只提示、不自动切。自动化局不提示
 //   11-04 维护者（一款第一方益智游戏标题页只认触屏）曾在屏幕上方常驻「键 / 触」切换钮；11-09 维护者 删掉，切换在齿轮菜单「按键布局」（点开即到，不再藏得深）；
 //   提示条（本 App 只提示一次）带「切到触屏」按钮，一点就切。切换与持久化在 vpad_layout.m setTouchOnly:（单测 t_vpad_toggle）
@@ -963,6 +980,15 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     });
 }
 - (BOOL)touchOnly { return _touchOnly; }
+- (void)refreshMode { _mode.selectedSegmentIndex = _touchOnly ? 2 : _passthrough ? 1 : 0; }
+// 「键」回本次最近一次用的按键方案（自定义的也回得去），没有就默认布局；「自动」「触」选对应的内置方案。
+//   与齿轮菜单选方案同一条路（menuChoseLayout：记「手动选过」、清掉自动切的本次覆盖）
+- (void)modeTapped:(UISegmentedControl *)control {
+    NSInteger i = control.selectedSegmentIndex;
+    NSString *lid = i == 2 ? S2AVPadLayoutTouchIdentifier : i == 1 ? S2AVPadLayoutAutoIdentifier : (_lastKeys ?: S2AVPadLayoutDefaultIdentifier);
+    LOG("触屏布局：切换钮选 %s", lid.UTF8String);
+    if (![self menuChoseLayout:lid]) [self refreshMode];   // 没切成：钮回到真实方案
+}
 // 切换方案（切换钮 / 提示条 / s2a_vpad_set_touch_only 共用；主线程）：返回 1 真切了、0 本来就是（或自动切遇到玩家手动选过）、-1 写盘失败（保持原方案）
 //   manual：切换钮 / 提示条 / 设置 = 玩家手动，持久化选择 + 记「手动选过」、清掉自动切的本次覆盖；
 //   自动（游戏声明触屏配置，一次成功线）：玩家手动选过就不切；否则只改本次运行（_autoTouch），不动持久化选择、不记手动
@@ -981,7 +1007,7 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     return r;
 }
 - (NSString *)layoutName {
-    return _touchOnly ? S2AL(@"vpad.layout.touch") : _usingDefault && ![_layout.identifier isEqualToString:S2AVPadLayout2DIdentifier] ? S2AL(@"vpad.layout.buttons") : _layout.displayName;
+    return _touchOnly ? S2AL(@"vpad.layout.touch") : _usingDefault && [_layout.identifier isEqualToString:S2AVPadLayoutDefaultIdentifier] ? S2AL(@"vpad.layout.buttons") : _layout.displayName;
 }
 - (UIViewController *)layoutController {
     __weak S2AVPadView *weakSelf = self;
@@ -995,7 +1021,7 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     settings.currentLayout = ^S2AVPadLayout *{
         S2AVPadView *view=weakSelf;
         if (view && view->_split==split) return view->_layout;
-        return [store selectedLayout:nil] ?: ([store.selectedIdentifier isEqualToString:S2AVPadLayout2DIdentifier] ? [S2AVPadLayout twoDForSafeRect:safe] : [S2AVPadLayout defaultForSafeRect:safe split:split]);
+        return [store selectedLayout:nil] ?: [S2AVPadLayout builtinForIdentifier:store.selectedIdentifier safeRect:safe split:split];
     };
     return settings;
 }
@@ -1020,7 +1046,10 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     } else _controls.layer.mask=nil;
     {   // 设置入口放安全区左上角；折叠屏内屏圆角比安全区报的大、又有开孔，四周再让 20 点（短边 ≥ 500 点才算大屏）
         CGRect g = self.safeAreaLayoutGuide.layoutFrame; CGFloat inset = MIN(self.bounds.size.width, self.bounds.size.height) >= 500 ? 20 : 4;
-        _gear.frame = CGRectMake(CGRectGetMinX(g) + inset, CGRectGetMinY(g) + inset, 36, 36); _gear.hidden = _editing; [self bringSubviewToFront:_gear]; }
+        _gear.frame = CGRectMake(CGRectGetMinX(g) + inset, CGRectGetMinY(g) + inset, 36, 36); _gear.hidden = _editing; [self bringSubviewToFront:_gear];
+        // 「键 / 自动 / 触」：上方正中、在 − / +（默认 / 自动 / 2D 布局都在离顶 22 点、半高 15 点）下面，不挡这两个键
+        CGFloat mw = 150, mh = 26; _mode.frame = CGRectMake(CGRectGetMidX(safe) - mw / 2, CGRectGetMinY(self.bounds) + 22 + 15 + 6, mw, mh);
+        _mode.hidden = _editing || s2a_unattended(); [self bringSubviewToFront:_mode]; }
     if (!CGRectEqualToRect(_safeRect, safe) || !CGRectEqualToRect(_lastBounds, self.bounds) || !CGRectEqualToRect(_division,l.division)) {
         if (_editing) [self endEditing];   // 转屏 / 安全区变了：拖到一半的位置按旧几何算，放弃
         [self clearTouches]; _safeRect = safe; _lastBounds = self.bounds; _division=l.division;
@@ -1187,18 +1216,17 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     return CGPointMake(MIN(bw - 1, MAX(0, x)), MIN(bh - 1, MAX(0, y)));
 }
 // HID 线程每帧调一次。返回触点个数（≤ 16）；attributes 用 TouchAttribute（1 = Start、2 = End、0 = 无）。
-// 只有「触屏直通」方案才写触点：虚拟按键方案（含默认布局）整层吃掉触摸，游戏收不到任何触点——
-//   否则手指去按 A / 摇杆时会被当成点按，游戏里的按钮跟着误触发。
+// 只有「触屏直通」与「自动」方案才写触点：其余按键方案（含默认布局）整层吃掉触摸，游戏收不到任何触点——
+//   否则手指去按 A / 摇杆时会被当成点按，游戏里的按钮跟着误触发。自动方案只把没按到键、不在摇杆激活区的手指写成触点（touchesBegan）。
 - (int)readTouches:(int32_t *)xy attributes:(uint32_t *)attributes {
     @synchronized(self) {
         // 不碰 UIKit（hidden 之类）——这是 HID 线程。暂停期间不留半截触点，免得恢复后补发一帧 End。
-        if (_settingsOpen || !_touchOnly || atomic_load(&_screenLocked)) { for (int i = 0; i < 16; i++) _slotState[i] = 0; return 0; }
+        if (_settingsOpen || !(_touchOnly || _passthrough) || atomic_load(&_screenLocked)) { for (int i = 0; i < 16; i++) _slotState[i] = 0; return 0; }
         int n = 0;
         for (int i = 0; i < 16; i++) {
-            if (_slotState[i] == 0) continue;
-            xy[2 * n] = _slotX[i]; xy[2 * n + 1] = _slotY[i];
-            if (_slotState[i] == 2) { attributes[n] = 2u; _slotState[i] = 0; }
-            else { attributes[n] = _slotStart[i] ? 1u : 0u; _slotStart[i] = NO; }
+            int32_t x = _slotX[i], y = _slotY[i];
+            int a = S2AVPadTouchSlotRead(&_slotState[i], &_slotStart[i]); if (a < 0) continue;   // 快速点按：先发一拍 Start，下一拍再 End
+            xy[2 * n] = x; xy[2 * n + 1] = y; attributes[n] = (uint32_t)a;
             n++;
         }
         return n;
@@ -1275,7 +1303,8 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
         int side = -1;
         if (_layoutStore.stickFixed) { for (int i = 0; i < 2; i++) { CGPoint c = [self fixedCenter:i]; if (hypot(p.x - c.x, p.y - c.y) <= _radius[i] * 1.3) { side = i; break; } } }   // 固定：只认摇杆圈附近
         else side = CGRectContainsPoint(_activation[0], p) ? 0 : CGRectContainsPoint(_activation[1], p) ? 1 : -1;
-        if (side < 0 || _stick[side]) continue;
+        if (side < 0) { if (_passthrough) [self beginSlot:t at:p]; continue; }   // 自动：没按到键、不在摇杆激活区（中间那条）→ 游戏触屏
+        if (_stick[side]) continue;
         _stick[side] = t; _c[side] = _layoutStore.stickFixed ? [self fixedCenter:side] : p; _downAt[side] = t.timestamp; _maxMove[side] = 0; [_held setObject:@(-1 - side) forKey:t];
         if (t.timestamp - _lastUp[side] < 0.3 && hypot(p.x - _lastUpAt[side].x, p.y - _lastUpAt[side].y) < 40) _stickPress |= 1u << (side ? B_RS : B_LS);   // 双击：第二下按住 = 摇杆按下
         _ring[side].center = _c[side]; _knob[side].center = _c[side]; _ring[side].hidden = _knob[side].hidden = NO;
@@ -1295,7 +1324,7 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     }
     for (UITouch *t in ts) {
         CGPoint p = [t locationInView:self];
-        if (_touchOnly) { [self moveSlot:t at:p]; continue; }
+        if (_touchOnly || [_slot objectForKey:t]) { [self moveSlot:t at:p]; continue; }   // 自动布局里落在触屏区的手指同纯触屏
         NSNumber *n = [_held objectForKey:t]; if (!n) continue;
         if (n.intValue < 0) { [self moveStick:-1 - n.intValue to:p]; continue; }
         if (n.intValue >= kDpadHeld) { int dirs = [_layout dpadDirectionsAt:p safeRect:_safeRect]; if (dirs >= 0) [_held setObject:@(kDpadHeld + dirs) forKey:t]; continue; }   // 滑出圆区保持最后的方向（同实体十字键按着滑）
@@ -1307,7 +1336,7 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
 - (void)end:(NSSet<UITouch *> *)ts {
     uint32_t tap = 0;
     for (UITouch *t in ts) {
-        if (_touchOnly) { [self endSlot:t]; continue; }
+        if (_touchOnly || [_slot objectForKey:t]) { [self endSlot:t]; continue; }
         NSNumber *n = [_held objectForKey:t]; if (!n) continue; [_held removeObjectForKey:t];
         if (n.intValue < 0) { int side = -1 - n.intValue; uint32_t bit = 1u << (side ? B_RS : B_LS);
             // 点按不拖 = 按一下摇杆（双击第二下按住时已经按着，不再补一下）

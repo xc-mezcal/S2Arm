@@ -29,7 +29,7 @@ static S2AVPadLayoutStore *store_for(const char *gid, BOOL split) {
 static S2AVPadLayout *base_for(S2AVPadLayoutStore *s, CGRect safe, BOOL split, BOOL *hasMine) {
     *hasMine = NO;
     for (S2AVPadLayout *l in s.layouts) if ([l.identifier isEqualToString:S2AVPadLayoutMineIdentifier]) { *hasMine = YES; return l; }
-    return [s.selectedIdentifier isEqualToString:S2AVPadLayout2DIdentifier] ? [S2AVPadLayout twoDForSafeRect:safe] : [S2AVPadLayout defaultForSafeRect:safe split:split];
+    return [S2AVPadLayout builtinForIdentifier:s.selectedIdentifier safeRect:safe split:split];
 }
 
 char *s2a_shell_vpad_layout_json(const char *game_id, double safe_w, double safe_h, int split) {
