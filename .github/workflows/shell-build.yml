@@ -124,7 +124,7 @@ jobs:
           path: ${{ runner.temp }}/mac
       - name: 解开 Mac 产物
         run: |
-          cd "$RUNNER_TEMP/mac" && for z in s2arm-shell tzdata fonts; do tar -xf "$z.zip"; done && ls
+          cd "$RUNNER_TEMP/mac" && for z in s2arm-shell tzdata fonts; do python -m zipfile -e "$z.zip" . || exit 1; done && ls && ls shell
       - name: 组装启动器目录（bundle_win.py）
         env:
           S2A_REWRITER_DEPS: ${{ github.workspace }}/build/rewriter-deps
