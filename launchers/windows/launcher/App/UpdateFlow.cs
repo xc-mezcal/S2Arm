@@ -56,6 +56,10 @@ public sealed partial class EnvironmentWindow
         if (value.TryGetProperty("update", out var update) && update.ValueKind == JsonValueKind.Object && update.TryGetProperty("available", out var available) && available.ValueKind == JsonValueKind.True)
             availableUpdate = update;
         updatePopup = value.TryGetProperty("popup", out var popup) && popup.ValueKind == JsonValueKind.Object ? popup : null;
+        // 测试分支（个人测试启动器）：不提示新版、不下载更新——点了「更新并重启」会把测试版换成官方版。公告 / 消息照旧
+        availableUpdate = null;
+        if (updatePopup is { } p && p.TryGetProperty("kind", out var kind) && kind.GetString() == "update") updatePopup = null;
+        UpdateLog.Write(Path.Combine(privateRoot, "logs", "update.log"), "测试版启动器：已关闭新版检查与下载");
         Render();
         if (availableUpdate is not null) await DownloadUpdateAsync();   // 后台下好，不打断玩家
     }
