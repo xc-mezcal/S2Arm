@@ -103,6 +103,7 @@ public sealed partial class EnvironmentWindow
     //    最多一个弹窗（这版更新了什么 / 有新版）、横幅（最新一条没看过的重要公告）、「消息」列表与未读数（只算最新那条公告）
     private JsonElement? updatePopup;   // {kind: update | afterUpdate, version, notes?}；kind = feature 是新功能大窗（FeatureSpotlight.cs）
     private JsonElement? availableUpdate;   // 有新版那一版 {version, notes?}：顶栏「有新版 vX」点开回到弹窗
+    private string testBuildNewVersion = "";   // 测试分支：查到的新版号，顶栏只显示文字、不能点（不弹窗、不下载）
     private bool installWhenReady;   // 玩家点了「现在更新」时还没下：下完接着装（同 Mac S2ArmLauncherModel.installWhenReady）
     private JsonElement[] messages = [];
     private int unreadMessages;
@@ -121,6 +122,11 @@ public sealed partial class EnvironmentWindow
         if (value.TryGetProperty("update", out var update) && update.ValueKind == JsonValueKind.Object && update.TryGetProperty("available", out var available) && available.ValueKind == JsonValueKind.True)
             availableUpdate = update;
         updatePopup = value.TryGetProperty("popup", out var popup) && popup.ValueKind == JsonValueKind.Object ? popup : null;
+        // 测试分支（个人测试启动器）：新版只在顶栏显示一行文字、不能点，不弹窗、不下载——点了「更新并重启」会把测试版换成官方版。公告 / 消息照旧
+        testBuildNewVersion = availableUpdate is { } found && found.TryGetProperty("version", out var fv) ? fv.GetString() ?? "" : "";
+        availableUpdate = null;
+        if (updatePopup is { } p && p.TryGetProperty("kind", out var kind) && kind.GetString() == "update") updatePopup = null;
+        UpdateLog.Write(Path.Combine(privateRoot, "logs", "update.log"), "测试版启动器：已关闭新版检查与下载");
         Render();
         // 有新版只提示，不自动下载（11-16 维护者：启动器与手机端都改成手动更新；同 Mac restartToUpdate #1283）：玩家点「现在更新」才下、下完接着装
     }
@@ -456,6 +462,13 @@ public sealed partial class EnvironmentWindow
             AutomationId(available, "top.update");
             available.Click += (_, _) => ShowUpdatePopup();
             bar.Children.Add(available);
+        }
+        else if (testBuildNewVersion.Length > 0)   // 测试分支：只提示，不是按钮（防误点）
+        {
+            var newVersion = new TextBlock { Text = T("update.top.available").Replace("{0}", testBuildNewVersion), FontSize = 12, Foreground = Brush.Parse("#A8A6A1"),
+                IsHitTestVisible = false, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+            AutomationId(newVersion, "top.update.notice");
+            bar.Children.Add(newVersion);
         }
         else if (updateFailure.Length > 0)
         {
