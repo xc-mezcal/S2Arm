@@ -276,7 +276,7 @@ void s2a_dprompt_ask(NSString *title, NSString *body, NSString *accept, NSString
     UIButton *_gear; NSTimer *_gearFade;    // 游戏内设置入口：屏幕左上角常驻，闲置时淡到看得见但不抢画面
     BOOL _touchWanted;                      // 游戏启用过触屏（s2a_vpad_touch_wanted）
     BOOL _passthrough;                      // 当前布局把没按到键、不在摇杆激活区的手指交给游戏触屏（auto；reloadLayout 写）
-    UISegmentedControl *_mode;              // 「键 / 自动 / 触」切换钮：常驻屏幕上方正中（− / + 下面），一点就切；不靠游戏有没有报触屏（有的游戏用触屏却不报）
+    UISegmentedControl *_mode;              // 「键 / 自动 / 触」切换钮：常驻屏幕上方正中（与 − / + 同一行、两键之间，placeMode），一点就切；不靠游戏有没有报触屏（有的游戏用触屏却不报）
     NSString *_lastKeys;                    // 本次运行最近一次用的按键方案（非 auto / touch）：「键」切回它，没有就回默认布局
     int _autoTouch;                         // 自动切（游戏声明触屏配置，manual=0）的本次运行覆盖：1 = 本次按仅触屏跑、不改持久化选择；0 = 没有覆盖
     // 拖动编辑按键位置（11-07 维护者）：编辑期间不向游戏发输入，手指拖哪个键挪哪个键；完成存成本款游戏的「我的布局」并选中
@@ -985,6 +985,27 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     });
 }
 - (BOOL)touchOnly { return _touchOnly; }
+// 「键 / 自动 / 触」放哪（按键摆好之后算，跟着真实按键框走，iPhone / iPad / 自定义布局都一样）：
+//   有 − / + 就和它们同一行、居中放在两键之间；中间放不下（自定义布局把两键挪近了）或压到别的键 → 放到 − / + 正下方；
+//   没有按键（仅触屏）→ 安全区上沿正中
+- (void)placeMode:(CGRect)safe {
+    if (!_mode) return;
+    CGFloat mh = 26, mw = 120;
+    CGRect minus = CGRectNull, plus = CGRectNull, gear = _gear.frame;
+    for (UILabel *k in _keys) { if (k.hidden) continue;
+        if ([k.accessibilityLabel isEqualToString:@"MINUS"]) minus = k.frame; else if ([k.accessibilityLabel isEqualToString:@"PLUS"]) plus = k.frame; }
+    CGRect f = CGRectMake(CGRectGetMidX(safe) - mw / 2, CGRectGetMinY(self.safeAreaLayoutGuide.layoutFrame) + 4, mw, mh);
+    if (!CGRectIsNull(minus) && !CGRectIsNull(plus)) {
+        CGFloat left = MIN(CGRectGetMaxX(minus), CGRectGetMaxX(plus)), right = MAX(CGRectGetMinX(minus), CGRectGetMinX(plus));
+        CGFloat midY = (CGRectGetMidY(minus) + CGRectGetMidY(plus)) / 2, room = right - left - 12;
+        f = CGRectMake((left + right) / 2 - MIN(mw, room) / 2, midY - mh / 2, MIN(mw, room), mh);
+        BOOL clash = room < 96 || CGRectIntersectsRect(f, gear);
+        for (UILabel *k in _keys) if (!k.hidden && CGRectIntersectsRect(CGRectInset(f, -4, -4), k.frame)) { clash = YES; break; }
+        if (clash) f = CGRectMake(CGRectGetMidX(safe) - mw / 2, MAX(CGRectGetMaxY(minus), CGRectGetMaxY(plus)) + 6, mw, mh);
+    }
+    if (CGRectGetMinY(f) < CGRectGetMinY(self.bounds) + 2) f.origin.y = CGRectGetMinY(self.bounds) + 2;
+    _mode.frame = CGRectIntegral(f); [self bringSubviewToFront:_mode];
+}
 - (void)refreshMode { _mode.selectedSegmentIndex = _touchOnly ? 2 : _passthrough ? 1 : 0; }
 // 「键」回本次最近一次用的按键方案（自定义的也回得去），没有就默认布局；「自动」「触」选对应的内置方案。
 //   与齿轮菜单选方案同一条路（menuChoseLayout：记「手动选过」、清掉自动切的本次覆盖）
@@ -1052,8 +1073,6 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     {   // 设置入口放安全区左上角；折叠屏内屏圆角比安全区报的大、又有开孔，四周再让 20 点（短边 ≥ 500 点才算大屏）
         CGRect g = self.safeAreaLayoutGuide.layoutFrame; CGFloat inset = MIN(self.bounds.size.width, self.bounds.size.height) >= 500 ? 20 : 4;
         _gear.frame = CGRectMake(CGRectGetMinX(g) + inset, CGRectGetMinY(g) + inset, 36, 36); _gear.hidden = _editing; [self bringSubviewToFront:_gear];
-        // 「键 / 自动 / 触」：上方正中、在 − / +（默认 / 自动 / 2D 布局都在离顶 22 点、半高 15 点）下面，不挡这两个键
-        CGFloat mw = 150, mh = 26; _mode.frame = CGRectMake(CGRectGetMidX(safe) - mw / 2, CGRectGetMinY(self.bounds) + 22 + 15 + 6, mw, mh);
         _mode.hidden = _editing || s2a_unattended(); [self bringSubviewToFront:_mode]; }
     if (!CGRectEqualToRect(_safeRect, safe) || !CGRectEqualToRect(_lastBounds, self.bounds) || !CGRectEqualToRect(_division,l.division)) {
         if (_editing) [self endEditing];   // 转屏 / 安全区变了：拖到一半的位置按旧几何算，放弃
@@ -1070,6 +1089,7 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
         key.frame = [_layout frameForButton:button safeRect:safe avoiding:_split?_division:CGRectNull scale:scale];
         key.layer.cornerRadius = MIN([button[@"cornerRadius"] doubleValue] * unit, MIN(key.bounds.size.width, key.bounds.size.height) / 2);
     }
+    [self placeMode:safe];
     // 截图测试开关（按下态不经 XCTest 也能在真机截到）：S2A_VPAD_TEST_PRESSED=A,X,ZR,UP… 把这些键画成按下态，下一次真触屏即恢复
     const char *testPressed = getenv("S2A_VPAD_TEST_PRESSED");
     if (testPressed && *testPressed) { NSArray *ids = [@(testPressed) componentsSeparatedByString:@","];
