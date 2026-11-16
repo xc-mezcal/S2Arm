@@ -229,8 +229,8 @@ int s2a_ios_fullscreen_state(NSString *gid, BOOL *on) {
     if (g && [g objectForKey:@"S2AWidescreen"]) { *on = [g boolForKey:@"S2AWidescreen"]; return 0; }
     if (!g && [app objectForKey:@"S2AWidescreen"]) { *on = [app boolForKey:@"S2AWidescreen"]; return 0; }   // 单款壳：App 级就是这款
     if ([app objectForKey:@"S2AWidescreen"] && ![app boolForKey:@"S2AWidescreen"]) { *on = NO; return 0; }
-    *on = caps_value_in(dir, "widen") == 1 || [NSFileManager.defaultManager fileExistsAtPath:[dir stringByAppendingPathComponent:@"widen_verified.tsv"]]
-        || adaptive_items(dir, NULL).count > 0;   // 有自适应满屏补丁（11-13 起命中就默认开）
+    // 测试分支：没选过就显示开（运行时满屏设置本来缺省开，runtime/src/widen.c widen_setting_on）；玩家关掉 = 明确 16:9 原比例加黑边
+    *on = YES;
     return 0;
 }
 void s2a_ios_set_fullscreen(NSString *gid, BOOL on) {
@@ -239,6 +239,9 @@ void s2a_ios_set_fullscreen(NSString *gid, BOOL on) {
     [g setBool:on forKey:@"S2AWidescreen"]; [g removeObjectForKey:@"S2AWidenForce"];
     NSArray<S2ACPatchGroup *> *groups = nil;   // 自适应满屏补丁跟着开关（写进这款的社区补丁选择 S2ACommunityPatches）
     for (S2ACPatchItem *it in adaptive_items(s2a_ios_game_dir(gid), &groups)) S2ACPatchSetEnabled(groups, s2a_ios_settings_defaults_for(gid), it.ident, on);
+    // 测试分支：关 = 原比例，这款的社区宽屏补丁一并关掉（开的时候不替玩家打开，补丁页里自己选）
+    if (!on) for (S2ACPatchGroup *x in groups) if ([x.kind isEqual:@"widescreen"]) for (S2ACPatchItem *it in x.items)
+        S2ACPatchSetEnabled(groups, s2a_ios_settings_defaults_for(gid), it.ident, NO);
 }
 
 NSArray<NSDictionary *> *s2a_ios_graphics_options(void) {
@@ -381,6 +384,9 @@ void s2a_ios_apply_graphics_settings(NSUserDefaults *defaults) {
     }
     if (!getenv("S2A_WIDESCREEN") && [defaults objectForKey:@"S2AWidescreen"] && ![defaults boolForKey:@"S2AWidescreen"]) {
         apply_environment("S2A_WIDESCREEN", @"0");
+        // 测试分支：满屏关 = 原比例，宽屏几层（已验证放开 / 直连整套放宽）一并关
+        if (!getenv("S2A_WIDEN_VERIFIED")) apply_environment("S2A_WIDEN_VERIFIED", @"0");
+        if (!getenv("S2A_WIDEN_DIRECT")) apply_environment("S2A_WIDEN_DIRECT", @"0");
         fprintf(stderr, "[S2A 画面设置] S2A_WIDESCREEN=0（宽屏关：%s）\n", game && [game objectForKey:@"S2AWidescreen"] ? "这款" : "所有游戏的默认");
     }
     // 补帧（11-14 维护者手测后定，取代我方 60 帧）：出图补帧（graphics/nvn/gfx/nvn/nvn_present_fi.inc）进程里一律备好，开不开按这款的设置当场定

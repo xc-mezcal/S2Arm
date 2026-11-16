@@ -123,7 +123,7 @@ char *s2a_shell_game_options_json(const char *game_id) {
             for (S2ACPatchGroup *g in groups) for (S2ACPatchItem *it in g.items) { if (it.followsFps60) { fpsP = YES; target = MAX(target, it.targetFps); } if ([g.kind isEqual:@"widescreen"] || it.followsFullscreen) wsP = YES; }
             // 只用社区补丁（11-13 维护者撤掉我方 60 帧与通用满屏，tools/caps_policy.py patch_only）：没有对应补丁的款不出这一行，玩家拿到的就是原生游戏
             if (!fpsP) fps[@"hidden"] = @YES;
-            if (!wsP) full[@"hidden"] = @YES;
+            (void)wsP;   // 测试分支：满屏开关每款都列，能关回原比例
             if (fpsP) {
                 fps[@"title"] = S2AL(@"settings.fps.patchTitle"); fps[@"enabled"] = @YES; fps[@"on"] = @(s2a_ios_fps60_on_for(gid));
                 fps[@"note"] = target > 0 ? [NSString stringWithFormat:S2AL(@"settings.fps.patchNote"), (long)target] : S2AL(@"settings.patchNote");

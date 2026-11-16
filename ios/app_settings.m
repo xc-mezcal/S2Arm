@@ -388,7 +388,7 @@ static UILabel *textLabel(UIFontTextStyle style) {
     BOOL fpsP = NO, wsP = NO;
     for (S2ACPatchGroup *g in _patchGroups) for (S2ACPatchItem *it in g.items) { if (it.followsFps60) fpsP = YES; if ([g.kind isEqual:@"widescreen"] || it.followsFullscreen) wsP = YES; }
     NSMutableArray *rows = [@[@0, @1, @2, @3] mutableCopy];
-    if (wsP) [rows addObject:@6];
+    (void)wsP; [rows addObject:@6];   // 测试分支：满屏开关每款都列（没有宽屏补丁的款也可能被拉伸，要能关回原比例）
     if (fpsP) [rows addObject:@7];
     if (fpsP && [self fpsLevels].count > 1) [rows addObject:@20];   // 帧率档位（两档以上才列）
     [rows addObject:@9];
