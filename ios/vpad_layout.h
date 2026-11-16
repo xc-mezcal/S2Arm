@@ -15,6 +15,8 @@ extern NSString *const S2AVPadLayout2DIdentifier;
 extern NSString *const S2AVPadLayoutAutoIdentifier;
 // 自动布局左右摇杆激活区各占安全区宽的比例；中间剩下的 1 - 2 × 它是触屏区
 static const double kS2AVPadAutoStickZone = 0.35;
+// 默认 / 自动 / 2D 布局里 − / + 中心离屏幕中线的距离（点）：两键之间留给「键 / 自动 / 触」切换钮
+static const double kS2AVPadMinusPlusOffset = 95;
 // Rendering targets shared by UIKit and host tests; idle must be in [0, 1].
 CGFloat S2AVPadKeyOpacity(CGFloat idle, BOOL active);
 
