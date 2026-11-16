@@ -123,7 +123,8 @@ static CGRect normalized_rect(NSDictionary *value) {
     NSArray *spec = @[@[@"A", @(ax + ad), @(ay)], @[@"B", @(ax), @(ay + ad)], @[@"X", @(ax), @(ay - ad)], @[@"Y", @(ax - ad), @(ay)],
         @[@"ZL", @(0.035 * w), @(0.358 * h)], @[@"L", @(0.135 * w), @(0.358 * h)],
         @[@"R", @(0.865 * w), @(0.358 * h)], @[@"ZR", @(0.965 * w), @(0.358 * h)],
-        @[@"MINUS", @(w / 2 - 52), @(22 - rect.origin.y)], @[@"PLUS", @(w / 2 + 52), @(22 - rect.origin.y)],
+        // − / + 左右各离中线 95 点（原 52）：中间空出约 130 点放「键 / 自动 / 触」切换钮（vpad.m layoutSubviews 与它们同一行）
+        @[@"MINUS", @(w / 2 - kS2AVPadMinusPlusOffset), @(22 - rect.origin.y)], @[@"PLUS", @(w / 2 + kS2AVPadMinusPlusOffset), @(22 - rect.origin.y)],
         @[@"UP", @(px), @(py - pd)], @[@"DOWN", @(px), @(py + pd)], @[@"LEFT", @(px - pd), @(py)], @[@"RIGHT", @(px + pd), @(py)],
         // 摇杆按下（11-06 维护者：七龙珠Z 协议确认页要按）：L3 / R3 挨着各自摇杆的上方；放在其它键之后，热区重叠处仍归旧键（keyAt 按顺序取第一个）
         @[@"LS", @(0.205 * w), @(0.489 * h)], @[@"RS", @(0.795 * w), @(0.489 * h)]];
@@ -159,7 +160,7 @@ static CGRect normalized_rect(NSDictionary *value) {
     NSArray *spec = @[@[@"A", @(ax + ad), @(ay), @64, @32], @[@"B", @(ax), @(ay + ad), @64, @32], @[@"X", @(ax), @(ay - ad), @64, @32], @[@"Y", @(ax - ad), @(ay), @64, @32],
         @[@"ZL", @(0.035 * w), @(0.358 * h), @58, @16], @[@"L", @(0.135 * w), @(0.358 * h), @58, @16],
         @[@"R", @(0.865 * w), @(0.358 * h), @58, @16], @[@"ZR", @(0.965 * w), @(0.358 * h), @58, @16],
-        @[@"MINUS", @(w / 2 - 52), @(22 - rect.origin.y), @30, @15], @[@"PLUS", @(w / 2 + 52), @(22 - rect.origin.y), @30, @15],
+        @[@"MINUS", @(w / 2 - kS2AVPadMinusPlusOffset), @(22 - rect.origin.y), @30, @15], @[@"PLUS", @(w / 2 + kS2AVPadMinusPlusOffset), @(22 - rect.origin.y), @30, @15],
         @[@"UP", @(px), @(py - pd), @56, @10], @[@"DOWN", @(px), @(py + pd), @56, @10], @[@"LEFT", @(px - pd), @(py), @56, @10], @[@"RIGHT", @(px + pd), @(py), @56, @10]];
     NSMutableArray *buttons = [NSMutableArray array];
     for (NSArray *s in spec) {
