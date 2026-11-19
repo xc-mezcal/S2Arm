@@ -7,13 +7,21 @@ on:
   push:
     branches: ['test/**']
   workflow_dispatch:
+    inputs:
+      mac_run_id:
+        description: '只重出 Windows 启动器：填一次成功出壳的运行号（留空 = 整套重出）；填 latest = 本分支最近一份还没过期的 Mac 产物'
+        required: false
+        default: ''
 permissions:
   contents: read
+  actions: read   # 只重出启动器时取上一次运行的 mac-inputs
 concurrency:
   group: shell-build-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   shell:
+    # 提交说明带 [launcher-only]，或手动运行填了 mac_run_id：跳过出壳，启动器作业取之前的 Mac 产物
+    if: ${{ !contains(github.event.head_commit.message, '[launcher-only]') && !inputs.mac_run_id }}
     runs-on: macos-26
     timeout-minutes: 150
     steps:
@@ -94,6 +102,7 @@ jobs:
 
   launcher:
     needs: shell
+    if: ${{ !cancelled() && (needs.shell.result == 'success' || needs.shell.result == 'skipped') }}
     # 随包 VC++ 运行库钉 14.44.35112（VS 2022 17.14 的 Redist）：windows-latest 已是 VS 2026，用还带 VS 2022 的 windows-2025
     runs-on: windows-2025
     timeout-minutes: 150
@@ -121,10 +130,27 @@ jobs:
           "C:/Program Files/LLVM/bin/clang" --version | head -1; cmake --version | head -1; cargo --version; dotnet --version
       - name: C 改写器固定依赖
         run: python runtime/rewriter/prepare_deps.py build/rewriter-deps
+      - name: 找之前的 Mac 产物（只重出启动器时）
+        id: macrun
+        if: ${{ needs.shell.result == 'skipped' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANT: ${{ inputs.mac_run_id }}
+        run: |
+          id=$WANT
+          if [ -z "$id" ] || [ "$id" = latest ]; then
+            id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=mac-inputs&per_page=100" \
+              --jq "[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == \"$GITHUB_REF_NAME\")][0].workflow_run.id")
+          fi
+          [ -n "$id" ] && [ "$id" != null ] || { echo "::error title=no mac-inputs::本分支没有还没过期的 Mac 产物，去掉 [launcher-only] 整套重出"; exit 1; }
+          echo "用运行 $id 的 Mac 产物" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           name: mac-inputs
           path: ${{ runner.temp }}/mac
+          run-id: ${{ steps.macrun.outputs.id || github.run_id }}
+          github-token: ${{ github.token }}
       - name: 解开 Mac 产物
         run: |
           cd "$RUNNER_TEMP/mac" && for z in s2arm-shell tzdata fonts; do python -m zipfile -e "$z.zip" . || exit 1; done && ls && ls shell
