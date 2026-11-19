@@ -128,10 +128,10 @@ jobs:
       - name: 解开 Mac 产物
         run: |
           cd "$RUNNER_TEMP/mac" && for z in s2arm-shell tzdata fonts; do python -m zipfile -e "$z.zip" . || exit 1; done && ls && ls shell
-      - name: Git for Windows 2.54.0（随包 bash / MinGit 跟这份版本走，runtime_cache.py 只钉了 2.54.0 的哈希）
+      - name: Git for Windows 2.54.0（随包 bash 取它的 usr/bin；上游 91114b84f 起 runtime_cache.py 不再钉 MinGit，版本写死在这里）
         run: |
-          v=$(python -c "import re; print(re.search(r'MinGit-(\d+\.\d+\.\d+)-64-bit', open('launchers/shared/runtime_cache.py',encoding='utf-8').read()).group(1))")
-          echo "钉的 Git 版本：$v"
+          v=2.54.0
+          echo "Git for Windows 版本：$v"
           curl -fsSL -o "$RUNNER_TEMP/pgit.7z.exe" "https://github.com/git-for-windows/git/releases/download/v$v.windows.1/PortableGit-$v-64-bit.7z.exe"
           7z x "$RUNNER_TEMP/pgit.7z.exe" -oC:/pgit -y > /dev/null
           C:/pgit/cmd/git.exe --version
