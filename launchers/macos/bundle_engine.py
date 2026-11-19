@@ -536,7 +536,7 @@ def seal_snapshot(destination, fingerprint):
     failed = [k for k, v in before.items() if k.startswith("sh_") and v[0]]
     diff = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
     if failed or diff:
-        for k in diff:   # 测试分支：把对不上的两边原值打出来（托管 Windows 上才复现）
+        for k in diff:   # 测试分支：把对不上的两边原值打出来（托管 Windows 上缺 shasum 时阶段键是空串，就是靠这行看出来的）
             print(f"[快照自检] {k}: git 读法 {before.get(k)!r} → engine.json 读法 {after.get(k)!r}", file=sys.stderr)
         print(f"[快照自检] engine.json 存的 stageFilesKeys = {fields.get('stageFilesKeys')!r}", file=sys.stderr)
         raise RuntimeError(f"引擎快照自检不过：git 读法报错 {failed}；删 .git 后读到的值与 git 算的不同 {diff}")
