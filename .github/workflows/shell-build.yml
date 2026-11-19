@@ -185,6 +185,10 @@ jobs:
           echo "cc 在：$(which -a cc 2> /dev/null | tr '\n' ' ')"
           PATH=$(printf %s "$PATH" | tr ':' '\n' | while IFS= read -r d; do if [ -e "$d/cc.exe" ] || [ -e "$d/cc" ]; then echo "PATH 去掉 $d" >&2; else printf '%s\n' "$d"; fi; done | paste -sd: -)
           export PATH; which clang
+          # 阶段键（pack/stage_keyfiles.sh stage_files_key）用 shasum：Git for Windows 放在 usr/bin/core_perl，只有登录 shell 的 profile 才加进 PATH；
+          #   Actions 的 bash 步不读 profile，缺它时 `| shasum | cut` 照样返回 0、键是空串，快照自检报 sh_key_* 对不上
+          for d in "/c/Program Files/Git/usr/bin/core_perl" /c/pgit/usr/bin/core_perl; do [ -x "$d/shasum" ] && { PATH="$d:$PATH"; break; }; done
+          export PATH; which shasum && echo x | shasum -a 256 || { echo "::error title=no shasum::托管机上找不到 shasum（Git for Windows usr/bin/core_perl）"; exit 1; }
           python -X utf8 launchers/windows/bundle_win.py C:/o/S2Arm --shell "$m/shell" --tzdata "$m/tzdata" --fonts "$m/fonts" 2>&1 | tee "$RUNNER_TEMP/bundle.log" || {
             msg=$( { tail -n 50 "$RUNNER_TEMP/bundle.log"; for f in build/windows/prepare-logs/*.log; do [ -f "$f" ] && { echo "== $f"; tail -n 15 "$f"; }; done; } | tail -n 120 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
             echo "::error title=bundle_win failed::$msg"; exit 1; }
