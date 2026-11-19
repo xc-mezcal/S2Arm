@@ -116,7 +116,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: 发版 tag（bundle_win.py 用 git describe --tags 取版本号；fork 不带上游的 tag）
-        run: git fetch --tags --force https://github.com/jhaizhou-ops/S2Arm.git && git describe --tags --abbrev=0
+        # 上游有不是版本号的 tag（impactor-v2.7.3-s2a1），git describe 会挑中它、bundle_win.py 报「不是 vX.Y.Z」：只留 vX.Y.Z 这类
+        run: |
+          git fetch --tags --force https://github.com/jhaizhou-ops/S2Arm.git
+          git tag -l | grep -Ev '^v?[0-9]+\.[0-9]+\.[0-9]+$' | xargs -r git tag -d > /dev/null
+          git describe --tags --abbrev=0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
