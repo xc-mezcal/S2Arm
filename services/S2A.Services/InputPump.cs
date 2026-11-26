@@ -798,48 +798,90 @@ namespace S2A.Services
         }
 
         // 只保存按键的 HID 可见窗；摇杆不经过这里。Commit 后才开始计时。
-        private sealed class ButtonVisibility
+        //   按下可见窗：新按下至少报这么久，短按不丢（原 20 ms；个人补丁取 max(20 ms, 帧窗)）。
+        //   松开可见窗（个人补丁）：松开后至少报帧窗这么久的「松开」才放下一次按下；窗内来的按下先记着（_pending），
+        //   窗一过就补发，手指早抬了也照发一次。按下窗里抬起又按下（两下都极短）同样记成第二下，不并进第一下。
+        //   帧窗缺省 34 ms ≈ 30 帧游戏的一帧，S2A_INPUT_FRAME_MS 可改；0 = 回到原行为（按下 20 ms、松开不撑）。
+        //   原因：游戏一帧只读一次 HID，按下或两下之间的松开短于一帧就看不见，节奏游戏快速双击只出一下。
+        internal sealed class ButtonVisibility
         {
-            private readonly ulong[] _until = new ulong[16];
-            private uint _submitted, _next, _newlyPressed;
+            internal const ulong MinPressHoldUs = 20_000;
+            internal static readonly ulong DefaultFrameUs =
+                uint.TryParse(Environment.GetEnvironmentVariable("S2A_INPUT_FRAME_MS"), out uint ms) ? ms * 1000UL : 34_000;
+            private readonly ulong[] _until = new ulong[16];          // 按下可见到何时
+            private readonly ulong[] _releaseUntil = new ulong[16];   // 松开可见到何时
+            private readonly ulong _pressHoldUs, _releaseHoldUs;
+            private uint _submitted, _next, _newlyPressed, _pending, _physReleased;   // _physReleased：按下窗撑着报按下、手指其实已抬起的键
             private ulong _epoch;
             private int _configuration;
+
+            public ButtonVisibility() : this(DefaultFrameUs) { }
+            public ButtonVisibility(ulong frameUs) { _pressHoldUs = Math.Max(MinPressHoldUs, frameUs); _releaseHoldUs = frameUs; }
+
+            // 松开窗还没过、本次不能报按下的键
+            private uint Closed(ulong now)
+            {
+                uint closed = 0;
+                for (int bit = 0; bit < _releaseUntil.Length; bit++)
+                {
+                    uint mask = 1u << bit;
+                    if ((_submitted & mask) == 0 && now < _releaseUntil[bit]) closed |= mask;
+                }
+                return closed;
+            }
 
             public uint Apply(uint buttons, ulong epoch, int configuration, ulong now)
             {
                 if (_epoch != epoch || _configuration != configuration)
                 {
                     Array.Clear(_until);
+                    Array.Clear(_releaseUntil);
                     _submitted = 0;
+                    _pending = 0;
+                    _physReleased = 0;
                     _epoch = epoch;
                     _configuration = configuration;
                 }
-                _newlyPressed = buttons & ~_submitted;
-                _next = buttons;
+                uint closed = Closed(now);
+                uint again = buttons & _physReleased & _submitted;   // 按下窗里抬起又按下（两下都很短）：这是第二下，不能并进第一下
+                _pending |= (buttons & closed) | again;   // 窗内的按下记着，窗过了补发
+                _physReleased = (_physReleased & ~again) | (_submitted & ~buttons);
+                uint mustRelease = _pending & _submitted;   // 记着的第二下：先等按下窗过去报一次松开
+                _next = (buttons | _pending) & ~closed & ~mustRelease;
                 for (int bit = 0; bit < _until.Length; bit++)
                 {
                     uint mask = 1u << bit;
                     if ((_submitted & mask) != 0 && now < _until[bit]) _next |= mask;
                 }
+                _newlyPressed = _next & ~_submitted;
                 return _next;
             }
 
             public void Commit(ulong submittedAt)
             {
+                uint released = _submitted & ~_next;
                 for (int bit = 0; bit < _until.Length; bit++)
                 {
-                    if ((_newlyPressed & (1u << bit)) != 0) _until[bit] = submittedAt + 20_000;
+                    uint mask = 1u << bit;
+                    if ((_newlyPressed & mask) != 0) _until[bit] = submittedAt + _pressHoldUs;
+                    if ((released & mask) != 0) _releaseUntil[bit] = submittedAt + _releaseHoldUs;
                 }
+                _pending &= ~_newlyPressed;
                 _submitted = _next;
+                _physReleased &= _submitted;
             }
 
             public ulong Deadline(uint physicalButtons, ulong now, ulong heartbeat)
             {
                 ulong deadline = heartbeat;
+                uint waiting = (physicalButtons | _pending) & ~_submitted;   // 等松开窗过去再报按下的键
                 for (int bit = 0; bit < _until.Length; bit++)
                 {
-                    if ((_submitted & ~physicalButtons & (1u << bit)) != 0 &&
+                    uint mask = 1u << bit;
+                    if ((_submitted & (~physicalButtons | _pending) & mask) != 0 &&
                         _until[bit] < deadline) deadline = Math.Max(_until[bit], now);
+                    if ((waiting & mask) != 0 && _releaseUntil[bit] > now &&
+                        _releaseUntil[bit] < deadline) deadline = _releaseUntil[bit];
                 }
                 return deadline;
             }
