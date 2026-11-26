@@ -132,6 +132,14 @@ jobs:
           echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
           python -m pip install ninja -r tools/rewriter-requirements.txt -r launchers/macos/requirements-runtime.txt
           "C:/Program Files/LLVM/bin/clang" --version | head -1; cmake --version | head -1; cargo --version; dotnet --version
+          # 托管机 windows-2025 换成 VS 2026 后，PATH 上的 LLVM clang++ 编 SPIRV-Cross（dsx.dll）全红：MSVC STL 按编译器版本拦。
+          #   直连翻译库（dsx_win.py / spvc_inproc.py 读 S2A_CC / S2A_CXX）改用 VS 自带的 clang，它与同一份 STL 配套
+          vsclang=$(ls -d "C:/Program Files/Microsoft Visual Studio"/*/*/VC/Tools/Llvm/x64/bin 2> /dev/null | sort | tail -n 1)
+          ls -d "C:/Program Files/Microsoft Visual Studio"/*/*/VC/Tools/MSVC/* 2> /dev/null || true
+          if [ -n "$vsclang" ] && [ -x "$vsclang/clang++.exe" ]; then
+            "$vsclang/clang++.exe" --version | head -1
+            echo "S2A_CC=$vsclang/clang.exe" >> "$GITHUB_ENV"; echo "S2A_CXX=$vsclang/clang++.exe" >> "$GITHUB_ENV"
+          else echo "没有 VS 自带 clang，dsx 照旧用 PATH 上的 LLVM clang"; fi
       - name: C 改写器固定依赖
         run: python runtime/rewriter/prepare_deps.py build/rewriter-deps
       - name: 找之前的 Mac 产物（只重出启动器时）
@@ -195,6 +203,9 @@ jobs:
           export PATH; which shasum && echo x | shasum -a 256 || { echo "::error title=no shasum::托管机上找不到 shasum（Git for Windows usr/bin/core_perl）"; exit 1; }
           python -X utf8 launchers/windows/bundle_win.py C:/o/S2Arm --shell "$m/shell" --tzdata "$m/tzdata" --fonts "$m/fonts" 2>&1 | tee "$RUNNER_TEMP/bundle.log" || {
             msg=$( { tail -n 50 "$RUNNER_TEMP/bundle.log"; for f in build/windows/prepare-logs/*.log; do [ -f "$f" ] && { echo "== $f"; tail -n 15 "$f"; }; done; } | tail -n 120 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+            # 编译报错埋在并行编译的输出中间、上面 120 行尾巴截不到：每个小库日志单独取头几条 error 行另起一条注解
+            for f in build/windows/prepare-logs/*.log; do e=$(grep -m 6 -B 1 -A 2 -E "error|STL1" "$f" 2> /dev/null | head -n 40 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')
+              [ -n "$e" ] && echo "::error title=$(basename "$f") errors::$e"; done
             echo "::error title=bundle_win failed::$msg"; exit 1; }
       - name: 启动器程序 S2Arm.exe
         run: dotnet publish launchers/windows/launcher/App/S2Arm.csproj -c Release -r win-x64 --self-contained true -o C:/o/S2Arm
