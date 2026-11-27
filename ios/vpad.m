@@ -923,6 +923,8 @@ static void snap_restart_result(int result, const char *detail, void *context) {
     if (show) _ring[side].center = _knob[side].center = [self fixedCenter:side];
 }
 - (void)stickModeChanged { [self clearTouches]; [self setNeedsLayout]; }
+// 设置页改了自动布局的触屏占比：当前是自动布局才重算（不记手动、不动本局触屏覆盖）
+- (void)autoTouchChanged { if (_passthrough) { [self clearTouches]; [self reloadLayout]; } }
 - (void)lostFocus:(NSNotification *)notification { [self clearTouches]; }
 - (void)playLayoutChanged:(NSNotification *)notification { [self clearTouches]; [self setNeedsLayout]; }
 - (CGRect)layoutSafeRect {
@@ -974,7 +976,7 @@ static void snap_restart_result(int result, const char *detail, void *context) {
     [self rebuildKeys]; [self setNeedsLayout]; [self wake];
     atomic_store(&g_touch_only, _touchOnly ? 1 : 0); atomic_store(&g_user_chose, _layoutStore.manualChosen ? 1 : 0); [self refreshMode];
     s2a_ios_mouse_sync();   // 切到仅触屏：鼠标视角不该再锁着
-    if (_passthrough) LOG("触屏布局：自动（左右各 %.0f%% 起浮动摇杆，中间 %.0f%% 没按到键的手指交给游戏触屏）", kS2AVPadAutoStickZone * 100, (1 - 2 * kS2AVPadAutoStickZone) * 100);
+    if (_passthrough) LOG("触屏布局：自动（左右各 %.0f%% 起浮动摇杆，中间 %.0f%% 没按到键的手指交给游戏触屏）", S2AVPadAutoStickZone() * 100, (1 - 2 * S2AVPadAutoStickZone()) * 100);
     if (_touchOnly) { LOG("触屏布局：纯触屏（不显示虚拟按键，手指直接交给游戏）"); return; }
     LOG("触屏布局：应用 %s（schema 1）", _layout.identifier.UTF8String);
 }
@@ -1265,6 +1267,7 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
         S2AVPadView *view = weakSelf; if (!view) return;
         view->_settingsOpen = NO; [view clearTouches]; [view wake];
     }];
+    settings.autoTouchChanged = ^{ [weakSelf autoTouchChanged]; };
     UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:settings];
     navigation.modalInPresentation = YES;
     [controller presentViewController:navigation animated:YES completion:nil];
@@ -1376,6 +1379,7 @@ static NSString *const kSlideSwitchKey = @"S2AVPadSlideSwitch";   // 滑动切�
     settings.embeddedInSettings = YES;
     settings.editRequested = ^{ [weakSelf beginEditing]; };
     settings.stickModeChanged = ^{ [weakSelf stickModeChanged]; };
+    settings.autoTouchChanged = ^{ [weakSelf autoTouchChanged]; };
     settings.currentLayout = ^S2AVPadLayout *{
         S2AVPadView *view=weakSelf;
         if (view && view->_split==split) return view->_layout;

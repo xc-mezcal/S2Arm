@@ -163,12 +163,14 @@
 "vpad.hud.touchSpaceScaled" = "÷ scale = touch space";
 "vpad.idleOpacity" = "Idle opacity";
 "vpad.idleOpacity.a11y" = "Idle button opacity";
+"vpad.autoTouch" = "Auto layout touch area";
+"vpad.autoTouch.note" = "Middle strip that goes to the game as touch: %d%% of the screen width";
 "vpad.layout.buttons" = "Button layout";
 "vpad.layout.default" = "Default layout";
 "vpad.layout.2d" = "2D layout";
 "vpad.layout.2d.note" = "Bigger D-pad with diagonals, no sticks; for side-scrollers and pixel games";
 "vpad.layout.auto" = "Auto";
-"vpad.layout.auto.note" = "Sticks on the left and right 35%; tapping the middle touches the game screen";
+"vpad.layout.auto.note" = "Sticks on the left and right; tapping the middle touches the game screen (width adjustable below)";
 "vpad.mode.keys" = "Keys";
 "vpad.mode.auto" = "Auto";
 "vpad.mode.touch" = "Touch";

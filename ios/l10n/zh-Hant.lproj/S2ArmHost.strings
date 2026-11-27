@@ -132,12 +132,14 @@
 "vpad.hud.touchSpaceScaled" = "÷ 倍率 = 觸點空間";
 "vpad.idleOpacity" = "閒置透明度";
 "vpad.idleOpacity.a11y" = "閒置按鍵透明度";
+"vpad.autoTouch" = "自動佈局觸控區";
+"vpad.autoTouch.note" = "中間交給遊戲當觸控的寬度：螢幕寬的 %d%%";
 "vpad.layout.buttons" = "按鍵配置";
 "vpad.layout.default" = "預設配置";
 "vpad.layout.2d" = "2D 配置";
 "vpad.layout.2d.note" = "十字鍵放大、可按斜角，沒有搖桿，適合橫向捲軸和像素遊戲";
 "vpad.layout.auto" = "自動";
-"vpad.layout.auto.note" = "左右各 35% 起搖桿，點中間直接觸控";
+"vpad.layout.auto.note" = "左右兩側起搖桿，點中間直接觸控（寬度在下面調）";
 "vpad.mode.keys" = "鍵";
 "vpad.mode.auto" = "自動";
 "vpad.mode.touch" = "觸";

@@ -163,12 +163,14 @@
 "vpad.hud.touchSpaceScaled" = "÷ 倍率 = 触点空间";
 "vpad.idleOpacity" = "闲置透明度";
 "vpad.idleOpacity.a11y" = "闲置按键透明度";
+"vpad.autoTouch" = "自动布局触屏区";
+"vpad.autoTouch.note" = "中间交给游戏当触屏的宽度：屏幕宽的 %d%%";
 "vpad.layout.buttons" = "按键布局";
 "vpad.layout.default" = "默认布局";
 "vpad.layout.2d" = "2D 布局";
 "vpad.layout.2d.note" = "十字键放大、可按斜角，没有摇杆，适合横版和像素游戏";
 "vpad.layout.auto" = "自动";
-"vpad.layout.auto.note" = "左右各 35% 起摇杆，点中间直接触屏";
+"vpad.layout.auto.note" = "左右两侧起摇杆，点中间直接触屏（宽度在下面调）";
 "vpad.mode.keys" = "键";
 "vpad.mode.auto" = "自动";
 "vpad.mode.touch" = "触";

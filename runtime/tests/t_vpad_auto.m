@@ -9,6 +9,8 @@
 //   ⑦ store：选 auto → 重开仍是 auto；auto → 切触 → 切回 = auto（.last_keys 记得 auto）
 //   ⑧ 槽位读取：按住 → Start、0、0，抬手 → End，再读 → 不出
 //   ⑨ 快速点按（按下、抬手都在两次读取之间）→ 先 Start、下一拍 End（旧实现只发一拍 End，游戏读不到按下）
+//   ⑩ 触屏占比设置（S2AVPadAutoTouchPercent，①–⑥ 按 30% 量）：没设过 = 40% → 摇杆区各 0.30；设 50 → 各 0.25、右区从 0.75w 起；
+//      设 90 / 10 → 夹到 70 / 30；字符串乱值 → 40
 //   旧实现没有 autoForSafeRect / S2AVPadTouchSlotRead：编不过（红）
 #import <Foundation/Foundation.h>
 #import "../../ios/vpad_layout.h"
@@ -19,6 +21,8 @@ static CGRect act(S2AVPadLayout *l, NSString *side, CGRect safe) {
     return CGRectNull;
 }
 int main(void) { @autoreleasepool {
+    NSUserDefaults *ud = NSUserDefaults.standardUserDefaults; id savedPct = [ud objectForKey:S2AVPadAutoTouchPercentKey];
+    [ud setInteger:30 forKey:S2AVPadAutoTouchPercentKey];   // ①–⑥ 按 30% 中间区量（左右各 0.35）
     CGRect safe = CGRectMake(0, 0, 832, 419);
     S2AVPadLayout *a = [S2AVPadLayout autoForSafeRect:safe split:NO], *d = [S2AVPadLayout defaultForSafeRect:safe split:NO];
     S2AVPadLayout *b1 = [S2AVPadLayout builtinForIdentifier:S2AVPadLayoutAutoIdentifier safeRect:safe split:NO];
@@ -56,6 +60,15 @@ int main(void) { @autoreleasepool {
     st = 2; start = YES; int t1 = S2AVPadTouchSlotRead(&st, &start), t2 = S2AVPadTouchSlotRead(&st, &start), t3 = S2AVPadTouchSlotRead(&st, &start);
     CK(t1 == 1 && t2 == 2 && t3 == -1, "⑨ 快速点按：Start、End、不出（实得 %d %d %d）", t1, t2, t3);
 
-    if (bad) printf("t_vpad_auto：%d 项不过\n", bad); else printf("✓ t_vpad_auto：9 项（内置映射 / 按键同默认 / 中间空地 / 默认负对照 / 透传标记 / 分屏 / 持久化与切回 / 槽位读取 / 快速点按）\n");
+    [ud removeObjectForKey:S2AVPadAutoTouchPercentKey]; double z0 = S2AVPadAutoStickZone(); int p0 = S2AVPadAutoTouchPercent();
+    [ud setInteger:50 forKey:S2AVPadAutoTouchPercentKey]; double z50 = S2AVPadAutoStickZone(); CGRect r50 = act([S2AVPadLayout autoForSafeRect:safe split:NO], @"right", safe);
+    [ud setInteger:90 forKey:S2AVPadAutoTouchPercentKey]; int hi = S2AVPadAutoTouchPercent();
+    [ud setInteger:10 forKey:S2AVPadAutoTouchPercentKey]; int lo = S2AVPadAutoTouchPercent();
+    [ud setObject:@"abc" forKey:S2AVPadAutoTouchPercentKey]; int junk = S2AVPadAutoTouchPercent();
+    if (savedPct) [ud setObject:savedPct forKey:S2AVPadAutoTouchPercentKey]; else [ud removeObjectForKey:S2AVPadAutoTouchPercentKey];
+    CK(p0 == 40 && fabs(z0 - 0.30) < 1e-9 && fabs(z50 - 0.25) < 1e-9 && fabs(CGRectGetMinX(r50) - 0.75 * 832) < 0.5 && hi == 70 && lo == 30 && junk == 40,
+       "⑩ 触屏占比：缺省 %d%%（摇杆区 %.2f）、50%% → %.2f 右区起 %.1f、90 → %d、10 → %d、乱值 → %d", p0, z0, z50, CGRectGetMinX(r50), hi, lo, junk);
+
+    if (bad) printf("t_vpad_auto：%d 项不过\n", bad); else printf("✓ t_vpad_auto：10 项（内置映射 / 按键同默认 / 中间空地 / 默认负对照 / 透传标记 / 分屏 / 持久化与切回 / 槽位读取 / 快速点按 / 触屏占比）\n");
     return bad ? 1 : 0;
 } }

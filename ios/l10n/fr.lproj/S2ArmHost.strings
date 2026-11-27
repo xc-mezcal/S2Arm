@@ -162,12 +162,14 @@
 "vpad.hud.touchSpaceScaled" = "÷ échelle = espace tactile";
 "vpad.idleOpacity" = "Opacité au repos";
 "vpad.idleOpacity.a11y" = "Opacité des boutons au repos";
+"vpad.autoTouch" = "Zone tactile de la disposition auto";
+"vpad.autoTouch.note" = "Bande centrale transmise au jeu comme écran tactile : %d%% de la largeur";
 "vpad.layout.buttons" = "Disposition des boutons";
 "vpad.layout.default" = "Disposition par défaut";
 "vpad.layout.2d" = "Disposition 2D";
 "vpad.layout.2d.note" = "Croix directionnelle agrandie avec diagonales, sans sticks ; pour jeux à défilement latéral et jeux en pixel art";
 "vpad.layout.auto" = "Auto";
-"vpad.layout.auto.note" = "Joysticks sur les 35 % gauche et droit ; toucher le centre touche l’écran du jeu";
+"vpad.layout.auto.note" = "Joysticks à gauche et à droite ; toucher le centre touche l’écran du jeu (largeur réglable plus bas)";
 "vpad.mode.keys" = "Touches";
 "vpad.mode.auto" = "Auto";
 "vpad.mode.touch" = "Tactile";

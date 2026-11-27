@@ -52,7 +52,7 @@
 }
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return _store.diagnostics.count ? 5 : 4; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return section == 0 ? _layouts.count + 4 : section == 1 ? 5 : section == 2 ? 5 : section == 3 ? 5 : _store.diagnostics.count;
+    return section == 0 ? _layouts.count + 4 : section == 1 ? 5 : section == 2 ? 6 : section == 3 ? 5 : _store.diagnostics.count;
 }
 // 0 = 默认布局，1 = 触屏直通，2 = 2D 布局（#268），3 = 自动（中间触屏），之后是用户布局（内置四项没有对应文件，所以固定占前四行）
 - (NSString *)identifierAtRow:(NSInteger)row {
@@ -85,6 +85,14 @@
         cell.textLabel.text = @[S2AL(@"vpad.layouts.edit"), S2AL(@"vpad.layouts.import"), S2AL(@"vpad.layouts.saveAs"), S2AL(@"vpad.layouts.export"), S2AL(@"vpad.layouts.reset")][indexPath.row];
         cell.accessibilityIdentifier = @[@"vpad.layouts.edit", @"vpad.layouts.import", @"vpad.layouts.save", @"vpad.layouts.export", @"vpad.layouts.reset"][indexPath.row];
         cell.textLabel.textColor = self.view.tintColor;
+    } else if (indexPath.section == 2 && indexPath.row == 5) {   // 自动布局中间触屏占比 30–70%（步长 5）
+        int pct = S2AVPadAutoTouchPercent();
+        cell.textLabel.text = S2AL(@"vpad.autoTouch");
+        cell.detailTextLabel.text = [NSString stringWithFormat:S2AL(@"vpad.autoTouch.note"), pct]; cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(0, 0, 150, 44)];
+        slider.minimumValue = kS2AVPadAutoTouchMin; slider.maximumValue = kS2AVPadAutoTouchMax; slider.value = pct; slider.continuous = NO;
+        slider.accessibilityIdentifier = @"vpad.autoTouch"; slider.accessibilityLabel = S2AL(@"vpad.autoTouch"); slider.accessibilityValue = [NSString stringWithFormat:@"%d%%", pct];
+        [slider addTarget:self action:@selector(autoTouchSlider:) forControlEvents:UIControlEventValueChanged]; cell.accessoryView = slider;
     } else if (indexPath.section == 2 && indexPath.row == 3) {
         cell.textLabel.text = S2AL(@"vpad.rumble"); cell.detailTextLabel.text = S2AL(@"vpad.layouts.rumble.note"); cell.selectionStyle = UITableViewCellSelectionStyleNone;
         id on = [NSUserDefaults.standardUserDefaults objectForKey:@"S2ARumbleOn"];
@@ -150,6 +158,12 @@
     cell.textLabel.numberOfLines = cell.detailTextLabel.numberOfLines = 0;
     if (self.embeddedInSettings) cell.backgroundColor = [UIColor.secondarySystemGroupedBackgroundColor colorWithAlphaComponent:UIAccessibilityIsReduceTransparencyEnabled() ? 1 : 0.75];
     return cell;
+}
+- (void)autoTouchSlider:(UISlider *)slider {
+    long pct = lround(slider.value / 5) * 5;   // 步长 5
+    [NSUserDefaults.standardUserDefaults setInteger:pct forKey:S2AVPadAutoTouchPercentKey];
+    if (self.autoTouchChanged) self.autoTouchChanged();
+    [self reload];
 }
 - (void)hapticsChanged:(UISwitch *)toggle {
     NSError *error;

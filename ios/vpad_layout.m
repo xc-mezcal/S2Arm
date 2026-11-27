@@ -8,6 +8,13 @@ NSString *const S2AVPadLayoutMineIdentifier = @"mine";
 NSString *const S2AVPadLayoutTouchIdentifier = @"touch";
 NSString *const S2AVPadLayout2DIdentifier = @"2d";
 NSString *const S2AVPadLayoutAutoIdentifier = @"auto";
+NSString *const S2AVPadAutoTouchPercentKey = @"S2AVPadAutoTouchPercent";
+int S2AVPadAutoTouchPercent(void) {
+    id v = [NSUserDefaults.standardUserDefaults objectForKey:S2AVPadAutoTouchPercentKey];
+    int p = [v isKindOfClass:NSNumber.class] ? [v intValue] : kS2AVPadAutoTouchDefault;   // 只认数字，别的（坏值）按缺省
+    return p < kS2AVPadAutoTouchMin ? kS2AVPadAutoTouchMin : p > kS2AVPadAutoTouchMax ? kS2AVPadAutoTouchMax : p;
+}
+double S2AVPadAutoStickZone(void) { return (1 - S2AVPadAutoTouchPercent() / 100.0) / 2; }
 
 CGFloat S2AVPadKeyOpacity(CGFloat idle, BOOL active) {
     return active ? MAX(0.75, idle) : idle;
@@ -173,9 +180,9 @@ static CGRect normalized_rect(NSDictionary *value) {
     layout->_buttons = buttons; layout->_sticks = @[]; return layout;
 }
 + (instancetype)autoForSafeRect:(CGRect)rect split:(BOOL)split {
-    // 按键照搬默认布局（同一套位置 / 尺寸），只把两根浮动摇杆的激活区从各占半屏收到各占 kS2AVPadAutoStickZone，中间空出来给触屏
+    // 按键照搬默认布局（同一套位置 / 尺寸），只把两根浮动摇杆的激活区从各占半屏收到各占 S2AVPadAutoStickZone()，中间空出来给触屏
     S2AVPadLayout *base = [self defaultForSafeRect:rect split:split];
-    double z = kS2AVPadAutoStickZone;
+    double z = S2AVPadAutoStickZone();
     NSMutableArray *sticks = [NSMutableArray array];
     for (NSDictionary *stick in base.sticks) {
         NSMutableDictionary *m = [stick mutableCopy]; BOOL left = [stick[@"id"] isEqualToString:@"left"];

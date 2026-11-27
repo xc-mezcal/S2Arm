@@ -162,12 +162,14 @@
 "vpad.hud.touchSpaceScaled" = "÷ 倍率 = タッチ空間";
 "vpad.idleOpacity" = "待機時の不透明度";
 "vpad.idleOpacity.a11y" = "待機時のボタン不透明度";
+"vpad.autoTouch" = "自動レイアウトのタッチ領域";
+"vpad.autoTouch.note" = "中央でゲームにタッチとして渡す範囲：画面幅の %d%%";
 "vpad.layout.buttons" = "ボタンレイアウト";
 "vpad.layout.default" = "デフォルトレイアウト";
 "vpad.layout.2d" = "2D レイアウト";
 "vpad.layout.2d.note" = "斜め入力可能な大きめの十字キー、スティックなし。横スクロールやピクセルゲームに最適";
 "vpad.layout.auto" = "オート";
-"vpad.layout.auto.note" = "左右35%にスティック、中央をタップするとゲーム画面をタッチ";
+"vpad.layout.auto.note" = "左右にスティック、中央をタップするとゲーム画面をタッチ（幅は下で調整）";
 "vpad.mode.keys" = "キー";
 "vpad.mode.auto" = "オート";
 "vpad.mode.touch" = "タッチ";

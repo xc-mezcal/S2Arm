@@ -10,11 +10,15 @@ extern NSString *const S2AVPadLayoutTouchIdentifier;
 // "2d"（#268，11-09 维护者定稿 cmdr/assets/268_vpad_2d_对比_1109.png）：横版 / 像素游戏用。十字键放大到左拇指落点、可按斜角，ABXY 放大，
 //   没有摇杆和 L3 / R3（左半屏不再抢触点）；同 default 按安全区现算，不对应磁盘文件
 extern NSString *const S2AVPadLayout2DIdentifier;
-// "auto"：按键与默认布局同位置，浮动摇杆只在左 35% / 右 35% 起；中间 30% 落下的手指（没按到键）直接进 Hid.Touchscreen。
+// "auto"：按键与默认布局同位置，浮动摇杆只在左右两侧起；中间一条（缺省 40%，设置页 30–70% 可调）落下的手指（没按到键）直接进 Hid.Touchscreen。
 //   按键优先于触屏（中间的 − / + 照旧是键），推摇杆不必等判定，点屏幕不用切方案。同 default 按安全区现算，不对应磁盘文件
 extern NSString *const S2AVPadLayoutAutoIdentifier;
-// 自动布局左右摇杆激活区各占安全区宽的比例；中间剩下的 1 - 2 × 它是触屏区
-static const double kS2AVPadAutoStickZone = 0.35;
+// 自动布局中间触屏区占安全区宽的百分比：设置页滑杆 30–70（步长 5），缺省 40，存 NSUserDefaults S2AVPadAutoTouchPercent（全局，不分游戏）
+static const int kS2AVPadAutoTouchMin = 30, kS2AVPadAutoTouchMax = 70, kS2AVPadAutoTouchDefault = 40;
+extern NSString *const S2AVPadAutoTouchPercentKey;
+int S2AVPadAutoTouchPercent(void);   // 读设置并夹到 [30, 70]；没设过 = 40
+// 左右摇杆激活区各占安全区宽的比例 = (1 - 触屏占比) / 2
+double S2AVPadAutoStickZone(void);
 // 默认 / 自动 / 2D 布局里 − / + 中心离屏幕中线的距离（点）：两键之间留给「键 / 自动 / 触」切换钮
 static const double kS2AVPadMinusPlusOffset = 95;
 // Rendering targets shared by UIKit and host tests; idle must be in [0, 1].
