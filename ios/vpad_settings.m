@@ -90,9 +90,11 @@
         cell.textLabel.text = S2AL(@"vpad.autoTouch");
         cell.detailTextLabel.text = [NSString stringWithFormat:S2AL(@"vpad.autoTouch.note"), pct]; cell.selectionStyle = UITableViewCellSelectionStyleNone;
         UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(0, 0, 150, 44)];
-        slider.minimumValue = kS2AVPadAutoTouchMin; slider.maximumValue = kS2AVPadAutoTouchMax; slider.value = pct; slider.continuous = NO;
+        slider.minimumValue = kS2AVPadAutoTouchMin; slider.maximumValue = kS2AVPadAutoTouchMax; slider.value = pct; slider.continuous = YES;   // 拖动中只刷新数字，松手才保存
         slider.accessibilityIdentifier = @"vpad.autoTouch"; slider.accessibilityLabel = S2AL(@"vpad.autoTouch"); slider.accessibilityValue = [NSString stringWithFormat:@"%d%%", pct];
-        [slider addTarget:self action:@selector(autoTouchSlider:) forControlEvents:UIControlEventValueChanged]; cell.accessoryView = slider;
+        [slider addTarget:self action:@selector(autoTouchSliding:) forControlEvents:UIControlEventValueChanged];
+        [slider addTarget:self action:@selector(autoTouchSlider:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
+        cell.accessoryView = slider;
     } else if (indexPath.section == 2 && indexPath.row == 3) {
         cell.textLabel.text = S2AL(@"vpad.rumble"); cell.detailTextLabel.text = S2AL(@"vpad.layouts.rumble.note"); cell.selectionStyle = UITableViewCellSelectionStyleNone;
         id on = [NSUserDefaults.standardUserDefaults objectForKey:@"S2ARumbleOn"];
@@ -159,8 +161,16 @@
     if (self.embeddedInSettings) cell.backgroundColor = [UIColor.secondarySystemGroupedBackgroundColor colorWithAlphaComponent:UIAccessibilityIsReduceTransparencyEnabled() ? 1 : 0.75];
     return cell;
 }
+- (void)autoTouchSliding:(UISlider *)slider {   // 拖动中：吸附到 5 的倍数，只改说明行的数字；不在拖动（读屏调节）时直接保存
+    long pct = lround(slider.value / 5) * 5;
+    UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:5 inSection:2]];
+    cell.detailTextLabel.text = [NSString stringWithFormat:S2AL(@"vpad.autoTouch.note"), (int)pct];
+    slider.accessibilityValue = [NSString stringWithFormat:@"%ld%%", pct];
+    if (!slider.tracking) [self autoTouchSlider:slider];
+}
 - (void)autoTouchSlider:(UISlider *)slider {
     long pct = lround(slider.value / 5) * 5;   // 步长 5
+    if (pct == S2AVPadAutoTouchPercent()) { slider.value = pct; return; }   // 没变就不重排布局
     [NSUserDefaults.standardUserDefaults setInteger:pct forKey:S2AVPadAutoTouchPercentKey];
     if (self.autoTouchChanged) self.autoTouchChanged();
     [self reload];
